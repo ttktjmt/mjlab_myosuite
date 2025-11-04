@@ -13,6 +13,8 @@ from rsl_rl.runners import OnPolicyRunner
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+from mjlab.tasks.myosuite.config import MyoSuiteEnvCfg
+from mjlab.tasks.myosuite.wrapper import MyoSuiteVecEnvWrapper
 from mjlab.tasks.tracking.rl import MotionTrackingOnPolicyRunner
 from mjlab.tasks.tracking.tracking_env_cfg import TrackingEnvCfg
 from mjlab.third_party.isaaclab.isaaclab_tasks.utils.parse_cfg import (
@@ -147,6 +149,9 @@ def run_play(task: str, cfg: PlayConfig):
     print(
       "[WARN] Video recording with dummy agents is disabled (no checkpoint/log_dir)."
     )
+  # Check if this is a MyoSuite environment
+  is_myosuite = task.startswith("Mjlab-MyoSuite") or isinstance(env_cfg, MyoSuiteEnvCfg)
+
   env = gym.make(task, cfg=env_cfg, device=device, render_mode=render_mode)
 
   if TRAINED_MODE and cfg.video:
@@ -159,15 +164,82 @@ def run_play(task: str, cfg: PlayConfig):
       disable_logger=True,
     )
 
-  env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+  # Handle MyoSuite environments differently
+  if is_myosuite:
+    # Helper function to find MyoSuiteVecEnvWrapper by unwrapping
+    def find_myosuite_wrapper(env_obj):
+      """Unwrap environment to find MyoSuiteVecEnvWrapper."""
+      current = env_obj
+      max_depth = 10
+      depth = 0
+      visited = set()
+
+      while depth < max_depth:
+        if isinstance(current, MyoSuiteVecEnvWrapper):
+          return current
+
+        obj_id = id(current)
+        if obj_id in visited:
+          break
+        visited.add(obj_id)
+
+        next_env = None
+        if hasattr(current, "env"):
+          try:
+            candidate = current.env
+            if candidate is not current and candidate is not None:
+              next_env = candidate
+          except (AttributeError, TypeError):
+            pass
+
+        if next_env is None and hasattr(current, "unwrapped"):
+          try:
+            candidate = current.unwrapped
+            if candidate is not current and candidate is not None:
+              next_env = candidate
+          except (AttributeError, TypeError):
+            pass
+
+        if next_env is None or next_env is current:
+          break
+
+        current = next_env
+        depth += 1
+
+      return None
+
+    # Find the MyoSuiteVecEnvWrapper
+    myosuite_wrapper = find_myosuite_wrapper(env)
+    if myosuite_wrapper is not None:
+      env = myosuite_wrapper
+      env.clip_actions = agent_cfg.clip_actions
+    else:
+      raise RuntimeError(
+        "Could not find MyoSuiteVecEnvWrapper in environment wrapper chain."
+      )
+  else:
+    env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+
   if DUMMY_MODE:
-    action_shape: tuple[int, ...] = env.unwrapped.action_space.shape  # type: ignore
+    # Get action shape - for vectorized environments, use single_action_space
+    if hasattr(env.unwrapped, "single_action_space"):
+      action_shape = env.unwrapped.single_action_space.shape  # type: ignore
+    else:
+      action_shape = env.unwrapped.action_space.shape  # type: ignore
+      # For vectorized spaces, remove batch dimension if present
+      if len(action_shape) > 1 and action_shape[0] == env.unwrapped.num_envs:
+        action_shape = action_shape[1:]
+
+    # Get device
+    env_device = env.unwrapped.device if hasattr(env.unwrapped, "device") else torch.device("cpu")
+
     if cfg.agent == "zero":
 
       class PolicyZero:
         def __call__(self, obs) -> torch.Tensor:
           del obs
-          return torch.zeros(action_shape, device=env.unwrapped.device)
+          # Return actions with shape (num_envs, action_dim)
+          return torch.zeros((env.unwrapped.num_envs,) + action_shape, device=env_device)
 
       policy = PolicyZero()
     else:
@@ -175,7 +247,8 @@ def run_play(task: str, cfg: PlayConfig):
       class PolicyRandom:
         def __call__(self, obs) -> torch.Tensor:
           del obs
-          return 2 * torch.rand(action_shape, device=env.unwrapped.device) - 1
+          # Return actions with shape (num_envs, action_dim)
+          return 2 * torch.rand((env.unwrapped.num_envs,) + action_shape, device=env_device) - 1
 
       policy = PolicyRandom()
   else:

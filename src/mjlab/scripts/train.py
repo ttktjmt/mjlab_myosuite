@@ -11,6 +11,9 @@ import gymnasium as gym
 import tyro
 
 from mjlab.rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+from mjlab.tasks.myosuite.config import MyoSuiteEnvCfg
+from mjlab.tasks.myosuite.rl import MyoSuiteOnPolicyRunner
+from mjlab.tasks.myosuite.wrapper import MyoSuiteVecEnvWrapper
 from mjlab.tasks.tracking.rl import MotionTrackingOnPolicyRunner
 from mjlab.tasks.tracking.tracking_env_cfg import TrackingEnvCfg
 from mjlab.tasks.velocity.rl import VelocityOnPolicyRunner
@@ -66,6 +69,9 @@ def run_train(task: str, cfg: TrainConfig) -> None:
     log_dir += f"_{cfg.agent.run_name}"
   log_dir = log_root_path / log_dir
 
+  # Check if this is a MyoSuite environment
+  is_myosuite = task.startswith("Mjlab-MyoSuite") or isinstance(cfg.env, MyoSuiteEnvCfg)
+
   env = gym.make(
     task, cfg=cfg.env, device=cfg.device, render_mode="rgb_array" if cfg.video else None
   )
@@ -76,6 +82,66 @@ def run_train(task: str, cfg: TrainConfig) -> None:
     else None
   )
 
+  # Helper function to find MyoSuiteVecEnvWrapper by unwrapping (needed for MyoSuite)
+  def find_myosuite_wrapper(env_obj):
+    """Unwrap environment to find MyoSuiteVecEnvWrapper."""
+    current = env_obj
+    max_depth = 10
+    depth = 0
+    visited = set()  # Prevent infinite loops
+
+    while depth < max_depth:
+      if isinstance(current, MyoSuiteVecEnvWrapper):
+        return current
+
+      # Prevent infinite loops
+      obj_id = id(current)
+      if obj_id in visited:
+        break
+      visited.add(obj_id)
+
+      # Try to unwrap - check multiple possible attribute names
+      next_env = None
+
+      # Try .env attribute (most common in gymnasium wrappers like OrderEnforcing)
+      if hasattr(current, "env"):
+        try:
+          candidate = current.env
+          if candidate is not current and candidate is not None:
+            next_env = candidate
+        except (AttributeError, TypeError):
+          pass
+
+      # Try .unwrapped property
+      if next_env is None and hasattr(current, "unwrapped"):
+        try:
+          candidate = current.unwrapped
+          if candidate is not current and candidate is not None:
+            next_env = candidate
+        except (AttributeError, TypeError):
+          pass
+
+      # Try ._env (private attribute some wrappers use)
+      if next_env is None and hasattr(current, "_env"):
+        try:
+          candidate = current._env
+          if candidate is not current and candidate is not None:
+            next_env = candidate
+        except (AttributeError, TypeError):
+          pass
+
+      if next_env is None or next_env is current:
+        # Can't unwrap further
+        break
+
+      current = next_env
+      depth += 1
+
+    return None
+
+  # Find the MyoSuiteVecEnvWrapper before wrapping with RecordVideo (if MyoSuite)
+  myosuite_wrapper = find_myosuite_wrapper(env) if is_myosuite else None
+
   if cfg.video:
     env = gym.wrappers.RecordVideo(
       env,
@@ -85,8 +151,37 @@ def run_train(task: str, cfg: TrainConfig) -> None:
       disable_logger=True,
     )
     print("[INFO] Recording videos during training.")
+    # Re-find the wrapper after RecordVideo wraps it
+    if is_myosuite and myosuite_wrapper is None:
+      myosuite_wrapper = find_myosuite_wrapper(env)
 
-  env = RslRlVecEnvWrapper(env, clip_actions=cfg.agent.clip_actions)
+  if is_myosuite:
+    # Unwrap gymnasium's OrderEnforcing wrapper to get to our MyoSuiteVecEnvWrapper
+    # The wrapper chain might be: OrderEnforcing -> RecordVideo -> MyoSuiteVecEnvWrapper
+    # We need the unwrapped env because OrderEnforcing doesn't forward get_observations()
+
+    if myosuite_wrapper is not None:
+      # Use the unwrapped wrapper directly
+      env = myosuite_wrapper
+      env.clip_actions = cfg.agent.clip_actions
+    else:
+      # If we couldn't find it, try one more time with current env
+      myosuite_wrapper = find_myosuite_wrapper(env)
+      if myosuite_wrapper is not None:
+        env = myosuite_wrapper
+        env.clip_actions = cfg.agent.clip_actions
+      else:
+        # If still not found, raise an error with helpful info
+        raise RuntimeError(
+          "Could not find MyoSuiteVecEnvWrapper in environment wrapper chain. "
+          f"Environment type: {type(env)}, "
+          f"has .env: {hasattr(env, 'env')}, "
+          f"has .unwrapped: {hasattr(env, 'unwrapped')}, "
+          f"unwrapped type: {type(getattr(env, 'unwrapped', None))}"
+        )
+  else:
+    # Standard mjlab environment - wrap with RslRlVecEnvWrapper
+    env = RslRlVecEnvWrapper(env, clip_actions=cfg.agent.clip_actions)
 
   agent_cfg = asdict(cfg.agent)
   env_cfg = asdict(cfg.env)
@@ -95,6 +190,9 @@ def run_train(task: str, cfg: TrainConfig) -> None:
     runner = MotionTrackingOnPolicyRunner(
       env, agent_cfg, str(log_dir), cfg.device, registry_name
     )
+  elif is_myosuite:
+    # MyoSuite environments use a custom runner that skips ONNX export
+    runner = MyoSuiteOnPolicyRunner(env, agent_cfg, str(log_dir), cfg.device)
   else:
     runner = VelocityOnPolicyRunner(env, agent_cfg, str(log_dir), cfg.device)
 
@@ -118,7 +216,7 @@ def main():
   task_prefix = "Mjlab-"
   chosen_task, remaining_args = tyro.cli(
     tyro.extras.literal_type_from_choices(
-      [k for k in gym.registry.keys() if k.startswith(task_prefix)]
+      [k for k in gym.registry.keys()]# if k.startswith(task_prefix)]
     ),
     add_help=False,
     return_unknown_args=True,
