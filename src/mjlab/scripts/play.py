@@ -231,7 +231,9 @@ def run_play(task: str, cfg: PlayConfig):
         action_shape = action_shape[1:]
 
     # Get device
-    env_device = env.unwrapped.device if hasattr(env.unwrapped, "device") else torch.device("cpu")
+    env_device = (
+      env.unwrapped.device if hasattr(env.unwrapped, "device") else torch.device("cpu")
+    )
 
     if cfg.agent == "zero":
 
@@ -239,7 +241,9 @@ def run_play(task: str, cfg: PlayConfig):
         def __call__(self, obs) -> torch.Tensor:
           del obs
           # Return actions with shape (num_envs, action_dim)
-          return torch.zeros((env.unwrapped.num_envs,) + action_shape, device=env_device)
+          return torch.zeros(
+            (env.unwrapped.num_envs,) + action_shape, device=env_device
+          )
 
       policy = PolicyZero()
     else:
@@ -248,7 +252,10 @@ def run_play(task: str, cfg: PlayConfig):
         def __call__(self, obs) -> torch.Tensor:
           del obs
           # Return actions with shape (num_envs, action_dim)
-          return 2 * torch.rand((env.unwrapped.num_envs,) + action_shape, device=env_device) - 1
+          return (
+            2 * torch.rand((env.unwrapped.num_envs,) + action_shape, device=env_device)
+            - 1
+          )
 
       policy = PolicyRandom()
   else:

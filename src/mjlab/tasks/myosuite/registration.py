@@ -14,10 +14,12 @@ def register_myosuite_envs(prefix: str = "Mjlab-MyoSuite"):
   myosuite_available = False
   try:
     import myosuite  # noqa: F401
+
     myosuite_available = True
   except ImportError:
     try:
       from myosuite.utils import gym as myosuite_gym  # noqa: F401
+
       myosuite_available = True
     except ImportError:
       pass
@@ -39,7 +41,9 @@ def register_myosuite_envs(prefix: str = "Mjlab-MyoSuite"):
   # Register each MyoSuite environment with mjlab
   for env_id in myosuite_envs:
     # Create a new ID with mjlab prefix
-    mjlab_env_id = f"{prefix}-{env_id.split('/')[-1]}" if "/" in env_id else f"{prefix}-{env_id}"
+    mjlab_env_id = (
+      f"{prefix}-{env_id.split('/')[-1]}" if "/" in env_id else f"{prefix}-{env_id}"
+    )
 
     # Skip if already registered
     if mjlab_env_id in gym.registry:
@@ -57,7 +61,9 @@ def register_myosuite_envs(prefix: str = "Mjlab-MyoSuite"):
       },
     )
 
-  print(f"[INFO] Registered {len(myosuite_envs)} MyoSuite environments with prefix '{prefix}'")
+  print(
+    f"[INFO] Registered {len(myosuite_envs)} MyoSuite environments with prefix '{prefix}'"
+  )
 
 
 def list_myosuite_envs() -> list[str]:
@@ -77,4 +83,3 @@ def list_myosuite_envs() -> list[str]:
       myosuite_envs.append(env_id)
 
   return sorted(myosuite_envs)
-

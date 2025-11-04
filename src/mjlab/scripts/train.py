@@ -216,7 +216,7 @@ def main():
   task_prefix = "Mjlab-"
   chosen_task, remaining_args = tyro.cli(
     tyro.extras.literal_type_from_choices(
-      [k for k in gym.registry.keys()]# if k.startswith(task_prefix)]
+      [k for k in gym.registry.keys()]  # if k.startswith(task_prefix)]
     ),
     add_help=False,
     return_unknown_args=True,

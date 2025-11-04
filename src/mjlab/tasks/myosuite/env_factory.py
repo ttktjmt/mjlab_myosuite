@@ -30,7 +30,6 @@ def make_myosuite_env(
       "MyoSuite is not installed. Install it with: pip install -U myosuite"
     ) from None
 
-
   # Don't set environment variables here - let the system use defaults
   # Setting DISPLAY=:99 or MUJOCO_GL=egl breaks the viewer when a real display is available
   # These should only be set when running in a truly headless environment (e.g., during training)
@@ -68,4 +67,3 @@ def make_myosuite_env(
     wrapped_env.spec = myosuite_env.spec
 
   return wrapped_env
-

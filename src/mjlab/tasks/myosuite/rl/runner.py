@@ -1,6 +1,5 @@
 """RL runner for MyoSuite environments."""
 
-
 from rsl_rl.runners import OnPolicyRunner
 
 from mjlab.tasks.myosuite.wrapper import MyoSuiteVecEnvWrapper
@@ -13,6 +12,7 @@ class MyoSuiteOnPolicyRunner(OnPolicyRunner):
   since MyoSuite environments don't have the ManagerBasedRlEnv structure
   required for ONNX metadata attachment.
   """
+
   env: MyoSuiteVecEnvWrapper
 
   def save(self, path: str, infos=None):
@@ -25,5 +25,3 @@ class MyoSuiteOnPolicyRunner(OnPolicyRunner):
     # Just call the base class save method, which saves the model
     # Skip ONNX export since MyoSuite doesn't have the required structure
     super().save(path, infos)
-
-

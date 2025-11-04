@@ -81,10 +81,12 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
     if not isinstance(original_obs_space, gym.spaces.Dict):
       # Convert single observation space to Dict with both policy and critic
       # Both use the same space (since we don't have privileged info for critic)
-      self.single_observation_space = gym.spaces.Dict({
-        "policy": original_obs_space,
-        "critic": original_obs_space,
-      })
+      self.single_observation_space = gym.spaces.Dict(
+        {
+          "policy": original_obs_space,
+          "critic": original_obs_space,
+        }
+      )
       # Update vectorized observation space
       self.observation_space = gym.vector.utils.batch_space(
         self.single_observation_space, self.num_envs
@@ -94,7 +96,11 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
       spaces_dict = dict(original_obs_space.spaces)
       if "policy" not in spaces_dict:
         # Use the first available space or create a default
-        first_space = next(iter(spaces_dict.values())) if spaces_dict else gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,))
+        first_space = (
+          next(iter(spaces_dict.values()))
+          if spaces_dict
+          else gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,))
+        )
         spaces_dict["policy"] = first_space
       if "critic" not in spaces_dict:
         # Use policy space for critic
@@ -119,35 +125,39 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
 
     # Estimate max episode length (MyoSuite environments typically have timeout)
     # Default to 1000 steps if not available
-    unwrapped_env = env.unwrapped if hasattr(env, 'unwrapped') else env
+    unwrapped_env = env.unwrapped if hasattr(env, "unwrapped") else env
     max_episode_length = None
 
     # Try to get max_episode_steps from spec
-    if hasattr(unwrapped_env, 'spec') and unwrapped_env.spec is not None:
-      max_episode_length = getattr(unwrapped_env.spec, 'max_episode_steps', None)
+    if hasattr(unwrapped_env, "spec") and unwrapped_env.spec is not None:
+      max_episode_length = getattr(unwrapped_env.spec, "max_episode_steps", None)
 
     # If not found in spec, try direct attribute
     if max_episode_length is None:
-      max_episode_length = getattr(unwrapped_env, 'max_episode_steps', None)
+      max_episode_length = getattr(unwrapped_env, "max_episode_steps", None)
 
     # If still None, try to get from the vectorized environment
     if max_episode_length is None and isinstance(self.env, vector.VectorEnv):
       # Try to get from the first environment in the vector
-      if hasattr(self.env, 'envs') and len(self.env.envs) > 0:
+      if hasattr(self.env, "envs") and len(self.env.envs) > 0:
         first_env = self.env.envs[0]
-        if hasattr(first_env, 'spec') and first_env.spec is not None:
-          max_episode_length = getattr(first_env.spec, 'max_episode_steps', None)
+        if hasattr(first_env, "spec") and first_env.spec is not None:
+          max_episode_length = getattr(first_env.spec, "max_episode_steps", None)
         if max_episode_length is None:
-          max_episode_length = getattr(first_env, 'max_episode_steps', None)
+          max_episode_length = getattr(first_env, "max_episode_steps", None)
 
     # Set with default fallback
-    self.max_episode_length = int(max_episode_length) if max_episode_length is not None else 1000
+    self.max_episode_length = (
+      int(max_episode_length) if max_episode_length is not None else 1000
+    )
 
     # Create mock cfg for compatibility
     self._mock_cfg = self._create_mock_cfg()
 
     # Track episode lengths
-    self.episode_length_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+    self.episode_length_buf = torch.zeros(
+      self.num_envs, device=self.device, dtype=torch.long
+    )
 
     # Track last observation for get_observations()
     self._last_obs_dict: dict[str, Any] = {}
@@ -189,7 +199,9 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
       myosuite_env = self.env
 
     # Unwrap to get the actual MyoSuite environment
-    while hasattr(myosuite_env, "unwrapped") and myosuite_env.unwrapped is not myosuite_env:
+    while (
+      hasattr(myosuite_env, "unwrapped") and myosuite_env.unwrapped is not myosuite_env
+    ):
       myosuite_env = myosuite_env.unwrapped
 
     # Create a mock wp_data object that provides numpy arrays from mj_data
@@ -252,6 +264,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         # MyoSuite environments update mj_data during step, but we need to ensure
         # forward kinematics are computed for visualization
         import mujoco
+
         mujoco.mj_forward(self._mj_model, self._mj_data)
         # xpos is shape (nbody, 3), we need to add batch dimension
         xpos_array = self._mj_data.xpos
@@ -262,6 +275,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         """Body orientation matrices. Shape: (batch_size, nbody, 3, 3)"""
         # Ensure mj_forward has been called to update xmat
         import mujoco
+
         mujoco.mj_forward(self._mj_model, self._mj_data)
         # xmat is shape (nbody, 9), reshape to (nbody, 3, 3), then add batch dimension
         xmat_array = self._mj_data.xmat.reshape(-1, 3, 3)
@@ -272,6 +286,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         """Geometry positions. Shape: (batch_size, ngeom, 3)"""
         # Ensure mj_forward has been called to update geom_xpos
         import mujoco
+
         mujoco.mj_forward(self._mj_model, self._mj_data)
         # geom_xpos is shape (ngeom, 3), we need to add batch dimension
         return self._make_array_proxy(self._mj_data.geom_xpos)
@@ -281,6 +296,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         """Geometry orientation matrices. Shape: (batch_size, ngeom, 3, 3)"""
         # Ensure mj_forward has been called to update geom_xmat
         import mujoco
+
         mujoco.mj_forward(self._mj_model, self._mj_data)
         # geom_xmat is shape (ngeom, 9), reshape to (ngeom, 3, 3), then add batch dimension
         return self._make_array_proxy(self._mj_data.geom_xmat.reshape(-1, 3, 3))
@@ -408,9 +424,11 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
       # Try to make it pass isinstance check by manipulating __class__
       try:
         from mjlab.sim.sim import Simulation
+
         # Create a dynamic subclass that inherits from Simulation
         class MockSimulationSubclass(Simulation):
           pass
+
         # Change the instance's class to the subclass
         object.__setattr__(mock_sim, "__class__", MockSimulationSubclass)
       except (ImportError, TypeError, AttributeError):
@@ -434,6 +452,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
       def to_dict(self) -> dict:
         """Convert to dictionary for wandb logging."""
         from dataclasses import asdict
+
         return asdict(self)
 
     return MockCfg()  # type: ignore[return-value]
@@ -514,17 +533,23 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
       else:
         # For non-tensors, convert to tensor on target device
         if isinstance(value, np.ndarray):
-          obs_dict_on_device[key] = torch.from_numpy(value).to(device=self.device, dtype=torch.float32).contiguous()
+          obs_dict_on_device[key] = (
+            torch.from_numpy(value)
+            .to(device=self.device, dtype=torch.float32)
+            .contiguous()
+          )
         else:
-          obs_dict_on_device[key] = torch.tensor(value, device=self.device, dtype=torch.float32).contiguous()
+          obs_dict_on_device[key] = torch.tensor(
+            value, device=self.device, dtype=torch.float32
+          ).contiguous()
 
     # Create TensorDict
     td = TensorDict(obs_dict_on_device, batch_size=[self.num_envs])
 
     # CRITICAL: RSL-RL accesses obs['policy'] directly, so we MUST ensure it's on correct device
     # Force move 'policy' observation to correct device with explicit verification
-    if 'policy' in td:
-      policy_val = td['policy']
+    if "policy" in td:
+      policy_val = td["policy"]
       if isinstance(policy_val, torch.Tensor):
         # Create a completely new tensor on the target device
         # Use .clone() to ensure it's a new tensor, then .to() to move it
@@ -532,23 +557,25 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         # Verify it's actually on the device
         if policy_on_device.device != self.device:
           # If still not on device, force it using .cuda() or explicit device placement
-          if self.device.type == 'cuda':
+          if self.device.type == "cuda":
             policy_on_device = policy_on_device.cuda(device=self.device)
           else:
             policy_on_device = policy_on_device.cpu()
-        td['policy'] = policy_on_device.contiguous()
+        td["policy"] = policy_on_device.contiguous()
 
       # Also ensure 'critic' is on correct device (same as policy for MyoSuite)
-      if 'critic' in td:
-        critic_val = td['critic']
+      if "critic" in td:
+        critic_val = td["critic"]
         if isinstance(critic_val, torch.Tensor):
-          critic_on_device = critic_val.clone().to(device=self.device, non_blocking=False)
+          critic_on_device = critic_val.clone().to(
+            device=self.device, non_blocking=False
+          )
           if critic_on_device.device != self.device:
-            if self.device.type == 'cuda':
+            if self.device.type == "cuda":
               critic_on_device = critic_on_device.cuda(device=self.device)
             else:
               critic_on_device = critic_on_device.cpu()
-          td['critic'] = critic_on_device.contiguous()
+          td["critic"] = critic_on_device.contiguous()
 
     return td
 
@@ -594,7 +621,9 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
           obs_dict[key] = value.to(device=self.device)
     self._last_obs_dict = obs_dict
     rew_tensor = torch.as_tensor(rew, device=self.device, dtype=torch.float32)
-    terminated_tensor = torch.as_tensor(terminated, device=self.device, dtype=torch.bool)
+    terminated_tensor = torch.as_tensor(
+      terminated, device=self.device, dtype=torch.bool
+    )
     truncated_tensor = torch.as_tensor(truncated, device=self.device, dtype=torch.bool)
 
     # Update episode lengths
@@ -654,7 +683,11 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
           policy_tensors.append(tensor)
       # Concatenate all non-policy/critic observations into a single 'policy' tensor
       if policy_tensors:
-        policy_obs = torch.cat(policy_tensors, dim=-1) if len(policy_tensors) > 1 else policy_tensors[0]
+        policy_obs = (
+          torch.cat(policy_tensors, dim=-1)
+          if len(policy_tensors) > 1
+          else policy_tensors[0]
+        )
         obs_dict["policy"] = policy_obs
         # Also provide 'critic' observation (same as policy for MyoSuite)
         if "critic" not in obs_dict:
@@ -684,7 +717,9 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         return obs_dict
       else:
         # List of arrays - map to both 'policy' and 'critic' groups
-        policy_obs = torch.from_numpy(np.array(obs)).to(device=self.device, dtype=torch.float32)
+        policy_obs = torch.from_numpy(np.array(obs)).to(
+          device=self.device, dtype=torch.float32
+        )
         return {"policy": policy_obs, "critic": policy_obs}
     else:
       # Fallback - try to convert directly, map to both 'policy' and 'critic' groups
@@ -699,7 +734,6 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
     """Close the environment."""
     return self.env.close()
 
-
   def _modify_action_space(self) -> None:
     """Modify action space if clipping is enabled."""
     if self.clip_actions is None:
@@ -712,4 +746,3 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
       self.action_space = gym.vector.utils.batch_space(
         self.single_action_space, self.num_envs
       )
-

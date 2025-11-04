@@ -20,5 +20,3 @@ def _register_all_myosuite_envs():
 _register_all_myosuite_envs()
 
 __all__ = ["MyoSuiteVecEnvWrapper", "register_myosuite_envs"]
-
-

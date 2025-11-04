@@ -17,6 +17,7 @@ class MyoSuiteEnvCfg:
   with mjlab's training infrastructure. The actual environment configuration
   comes from MyoSuite itself.
   """
+
   num_envs: int = 1
   """Number of parallel environments."""
   device: str = "cpu"
@@ -48,4 +49,3 @@ def get_default_myosuite_rl_cfg() -> RslRlOnPolicyRunnerCfg:
     ),
     clip_actions=None,  # Let MyoSuite handle action bounds
   )
-
