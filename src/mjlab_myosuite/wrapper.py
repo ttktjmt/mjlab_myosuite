@@ -286,7 +286,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         # forward kinematics are computed for visualization
         import mujoco
 
-        mujoco.mj_forward(self._mj_model, self._mj_data)
+        mujoco.mj_forward(self._mj_model, self._mj_data)  # type: ignore[attr-defined]
         # xpos is shape (nbody, 3), we need to add batch dimension
         xpos_array = self._mj_data.xpos
         return self._make_array_proxy(xpos_array)
@@ -297,7 +297,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         # Ensure mj_forward has been called to update xmat
         import mujoco
 
-        mujoco.mj_forward(self._mj_model, self._mj_data)
+        mujoco.mj_forward(self._mj_model, self._mj_data)  # type: ignore[attr-defined]
         # xmat is shape (nbody, 9), reshape to (nbody, 3, 3), then add batch dimension
         xmat_array = self._mj_data.xmat.reshape(-1, 3, 3)
         return self._make_array_proxy(xmat_array)
@@ -308,7 +308,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         # Ensure mj_forward has been called to update geom_xpos
         import mujoco
 
-        mujoco.mj_forward(self._mj_model, self._mj_data)
+        mujoco.mj_forward(self._mj_model, self._mj_data)  # type: ignore[attr-defined]
         # geom_xpos is shape (ngeom, 3), we need to add batch dimension
         return self._make_array_proxy(self._mj_data.geom_xpos)
 
@@ -318,7 +318,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         # Ensure mj_forward has been called to update geom_xmat
         import mujoco
 
-        mujoco.mj_forward(self._mj_model, self._mj_data)
+        mujoco.mj_forward(self._mj_model, self._mj_data)  # type: ignore[attr-defined]
         # geom_xmat is shape (ngeom, 9), reshape to (ngeom, 3, 3), then add batch dimension
         return self._make_array_proxy(self._mj_data.geom_xmat.reshape(-1, 3, 3))
 
@@ -377,7 +377,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
           """Return mj_data, ensuring forward kinematics are up to date."""
           import mujoco
 
-          mujoco.mj_forward(self._env.mj_model, self._env.mj_data)
+          mujoco.mj_forward(self._env.mj_model, self._env.mj_data)  # type: ignore[attr-defined]
           return self._env.mj_data
 
         @property
@@ -386,7 +386,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
           # Ensure forward kinematics are computed before accessing wp_data
           import mujoco
 
-          mujoco.mj_forward(self._env.mj_model, self._env.mj_data)
+          mujoco.mj_forward(self._env.mj_model, self._env.mj_data)  # type: ignore[attr-defined]
           return self._wp_data
 
         @property
@@ -394,7 +394,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
           """Return mj_data for compatibility with sim.data access."""
           import mujoco
 
-          mujoco.mj_forward(self._env.mj_model, self._env.mj_data)
+          mujoco.mj_forward(self._env.mj_model, self._env.mj_data)  # type: ignore[attr-defined]
           return self._env.mj_data
 
         # Override methods that might be called but aren't needed
@@ -407,7 +407,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
           import mujoco
 
           # Ensure forward kinematics are computed for visualization
-          mujoco.mj_forward(self._env.mj_model, self._env.mj_data)
+          mujoco.mj_forward(self._env.mj_model, self._env.mj_data)  # type: ignore[attr-defined]
 
         def step(self) -> None:
           """No-op for MyoSuite (step handled by MyoSuite)."""
@@ -536,28 +536,14 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
     """Return class name."""
     return cls.__name__
 
-  @property
-  def spec(self):
-    """Get environment spec from wrapped environment or stored value."""
-    # First check if we have a stored spec
-    if hasattr(self, "_spec"):
-      return self._spec
-    # Otherwise get from wrapped environment
-    return getattr(self.env, "spec", None)
-
-  @spec.setter
-  def spec(self, value):
-    """Set environment spec (also set on wrapped environment)."""
-    # Store locally for direct access
-    object.__setattr__(self, "_spec", value)
-    # Also set on wrapped environment if it supports it
-    if hasattr(self.env, "spec"):
-      self.env.spec = value
+  # Gymnasium environments expose an attribute `spec: EnvSpec | None`.
+  # We keep a plain attribute to satisfy static type checkers.
+  spec: Any = None
 
   def seed(self, seed: int = -1) -> int:
     """Set seed for environment."""
     if hasattr(self.env, "seed"):
-      return self.env.seed(seed)
+      return self.env.seed(seed)  # type: ignore[attr-defined]
     return seed
 
   def get_observations(self) -> TensorDict:
@@ -606,8 +592,8 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         policy_on_device = policy_val.clone().to(device=self.device, non_blocking=False)
         # Verify it's actually on the device
         if policy_on_device.device != self.device:
-          # If still not on device, force it using .cuda() or explicit device placement
-          if self.device.type == "cuda":
+          # If still not on device, force it using CUDA or CPU explicit placement
+          if str(self.device).startswith("cuda"):
             policy_on_device = policy_on_device.cuda(device=self.device)
           else:
             policy_on_device = policy_on_device.cpu()
@@ -621,7 +607,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
             device=self.device, non_blocking=False
           )
           if critic_on_device.device != self.device:
-            if self.device.type == "cuda":
+            if str(self.device).startswith("cuda"):
               critic_on_device = critic_on_device.cuda(device=self.device)
             else:
               critic_on_device = critic_on_device.cpu()
@@ -661,7 +647,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
 
     return TensorDict(obs_dict, batch_size=[self.num_envs]), info
 
-  def step(
+  def step(  # type: ignore[override]
     self, actions: torch.Tensor
   ) -> tuple[TensorDict, torch.Tensor, torch.Tensor, dict]:
     """Step the environment."""
