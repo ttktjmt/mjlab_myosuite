@@ -18,3 +18,16 @@ uv run sripts/train.py Mjlab-MyoSuite-myoElbowPose1D6MRandom-v0 --env.num_envs 4
 ```bash
 uv run scripts/play.py Mjlab-MyoSuite-myoElbowPose1D6MRandom-v0 --wandb-run-path your-org/mjlab/run-id
 ```
+
+
+## Development
+Run tests:
+```
+make test          # Run all tests
+make test-fast     # Skip slow integration tests
+```
+Format code:
+```
+uvx pre-commit install
+make format
+```

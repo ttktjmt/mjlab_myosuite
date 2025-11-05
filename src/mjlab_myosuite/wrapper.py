@@ -32,7 +32,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
     self,
     env: gym.Env | vector.VectorEnv,
     num_envs: int | None = None,
-    device: str = "cpu",
+    device: str | torch.device = "cpu",
     clip_actions: float | None = None,
   ):
     """Initialize the wrapper.
@@ -47,8 +47,30 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
     gym.Env.__init__(self)
 
     self.clip_actions = clip_actions
-    self.device_str = device
-    self.device = torch.device(device)
+
+    # Normalize device specification (accepts "CUDA:0", "cuda:0", torch.device, etc.)
+    def _normalize_device(d: str | torch.device) -> torch.device:
+      if isinstance(d, torch.device):
+        return d
+      d_str = str(d).strip()
+      d_lc = d_str.lower()
+      if d_lc.startswith("cuda"):
+        # Accept forms like "cuda" or "cuda:0" or uppercase variants
+        if ":" in d_lc:
+          idx = d_lc.split(":", 1)[1]
+          dev = f"cuda:{idx}"
+        else:
+          dev = "cuda"
+        try:
+          return torch.device(dev)
+        except Exception:
+          return torch.device("cpu")
+      # Default to cpu for anything else
+      return torch.device("cpu")
+
+    norm_device = _normalize_device(device)
+    self.device_str = str(norm_device)
+    self.device = norm_device
 
     # Vectorize if needed
     if isinstance(env, vector.VectorEnv):
@@ -607,9 +629,18 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
 
     return td
 
-  def reset(self) -> tuple[TensorDict, dict]:
-    """Reset the environment."""
-    obs, info = self.env.reset()
+  def reset(
+    self,
+    *,
+    seed: int | None = None,
+    options: dict | None = None,
+  ) -> tuple[TensorDict, dict]:
+    """Reset the environment (gym-compatible signature)."""
+    try:
+      obs, info = self.env.reset(seed=seed, options=options)
+    except TypeError:
+      # Fallback for older envs without seed/options
+      obs, info = self.env.reset()
 
     # Update forward kinematics for visualization after reset
     # This is critical for the viewer to show the initial state
