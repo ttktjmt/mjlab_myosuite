@@ -221,9 +221,13 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
 
     # Unwrap to get the actual MyoSuite environment
     while (
-      hasattr(myosuite_env, "unwrapped") and myosuite_env.unwrapped is not myosuite_env
+      myosuite_env is not None
+      and hasattr(myosuite_env, "unwrapped")
+      and myosuite_env.unwrapped is not myosuite_env
     ):
       myosuite_env = myosuite_env.unwrapped
+    if myosuite_env is None:
+      raise RuntimeError("Failed to unwrap underlying MyoSuite environment")
 
     # Create a mock wp_data object that provides numpy arrays from mj_data
     class MockWpData:
@@ -345,9 +349,9 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
     # Create a mock sim object that inherits from Simulation to pass isinstance checks
     # We need to import Simulation here to avoid circular imports
     try:
-      from mjlab.sim.sim import Simulation
+      from mjlab.sim.sim import Simulation as _SimulationBase
 
-      class MockSim(Simulation):
+      class MockSimPrimary(_SimulationBase):  # type: ignore[misc]
         """Mock Simulation that works with MyoSuite environments.
 
         This class inherits from Simulation to pass isinstance checks,
@@ -414,12 +418,12 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
           pass
 
       # Create and return the mock sim
-      mock_sim = MockSim(myosuite_env)
+      mock_sim = MockSimPrimary(myosuite_env)
 
     except (ImportError, TypeError):
       # Fallback: if Simulation import fails or inheritance doesn't work,
       # create a regular class and use __class__ manipulation
-      class MockSim:
+      class MockSimFallback:
         def __init__(self, env):
           self._env = env
           self._mj_model = env.mj_model
@@ -469,7 +473,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
         def step(self) -> None:
           pass
 
-      mock_sim = MockSim(myosuite_env)
+      mock_sim = MockSimFallback(myosuite_env)
 
       # Try to make it pass isinstance check by manipulating __class__
       try:

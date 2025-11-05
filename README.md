@@ -25,6 +25,8 @@ Run tests:
 ```
 make test          # Run all tests
 make test-fast     # Skip slow integration tests
+uv run pytest
+uv run pyright
 ```
 Format code:
 ```

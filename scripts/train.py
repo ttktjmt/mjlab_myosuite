@@ -112,7 +112,9 @@ def run_train(task: str, cfg: TrainConfig) -> None:
     visited = set()  # Prevent infinite loops
 
     while depth < max_depth:
-      if isinstance(current, MyoSuiteVecEnvWrapper):
+      if (MyoSuiteVecEnvWrapper is not None) and isinstance(
+        current, MyoSuiteVecEnvWrapper
+      ):
         return current
 
       # Prevent infinite loops
@@ -213,6 +215,7 @@ def run_train(task: str, cfg: TrainConfig) -> None:
     )
   elif is_myosuite:
     # MyoSuite environments use a custom runner that skips ONNX export
+    assert MyoSuiteOnPolicyRunner is not None
     runner = MyoSuiteOnPolicyRunner(env, agent_cfg, str(log_dir), cfg.device)
   else:
     runner = VelocityOnPolicyRunner(env, agent_cfg, str(log_dir), cfg.device)

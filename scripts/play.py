@@ -74,10 +74,7 @@ def run_play(task: str, cfg: PlayConfig):
   device = cfg.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
 
   # Check if this is a MyoSuite environment
-  is_myosuite = task.startswith("Mjlab-MyoSuite") or (
-    MyoSuiteEnvCfg is not None
-    and isinstance(load_cfg_from_registry(task, "env_cfg_entry_point"), MyoSuiteEnvCfg)
-  )
+  is_myosuite = task.startswith("Mjlab-MyoSuite")
 
   env_cfg = cast(
     ManagerBasedRlEnvCfg, load_cfg_from_registry(task, "env_cfg_entry_point")
@@ -88,7 +85,9 @@ def run_play(task: str, cfg: PlayConfig):
 
   # For MyoSuite environments, set device in config to match policy device
   # This ensures observations are on the correct device
-  if is_myosuite and isinstance(env_cfg, MyoSuiteEnvCfg):
+  if (
+    is_myosuite and (MyoSuiteEnvCfg is not None) and isinstance(env_cfg, MyoSuiteEnvCfg)
+  ):
     env_cfg.device = device
 
   DUMMY_MODE = cfg.agent in {"zero", "random"}
@@ -195,7 +194,9 @@ def run_play(task: str, cfg: PlayConfig):
       visited = set()
 
       while depth < max_depth:
-        if isinstance(current, MyoSuiteVecEnvWrapper):
+        if (MyoSuiteVecEnvWrapper is not None) and isinstance(
+          current, MyoSuiteVecEnvWrapper
+        ):
           return current
 
         obj_id = id(current)
@@ -246,12 +247,17 @@ def run_play(task: str, cfg: PlayConfig):
 
   if DUMMY_MODE:
     # Get action shape - for vectorized environments, use single_action_space
+    action_shape = None
     if hasattr(env.unwrapped, "single_action_space"):
-      action_shape = env.unwrapped.single_action_space.shape  # type: ignore
+      action_shape = getattr(env.unwrapped.single_action_space, "shape", None)  # type: ignore
     else:
-      action_shape = env.unwrapped.action_space.shape  # type: ignore
+      action_shape = getattr(env.unwrapped.action_space, "shape", None)  # type: ignore
       # For vectorized spaces, remove batch dimension if present
-      if len(action_shape) > 1 and action_shape[0] == env.unwrapped.num_envs:
+      if (
+        isinstance(action_shape, tuple)
+        and len(action_shape) > 1
+        and getattr(env.unwrapped, "num_envs", 1) == action_shape[0]
+      ):
         action_shape = action_shape[1:]
 
     # Get device
@@ -265,8 +271,9 @@ def run_play(task: str, cfg: PlayConfig):
         def __call__(self, obs) -> torch.Tensor:
           del obs
           # Return actions with shape (num_envs, action_dim)
+          per_env_shape = action_shape if isinstance(action_shape, tuple) else ()
           return torch.zeros(
-            (env.unwrapped.num_envs,) + action_shape, device=env_device
+            (getattr(env.unwrapped, "num_envs", 1),) + per_env_shape, device=env_device
           )
 
       policy = PolicyZero()
@@ -276,8 +283,13 @@ def run_play(task: str, cfg: PlayConfig):
         def __call__(self, obs) -> torch.Tensor:
           del obs
           # Return actions with shape (num_envs, action_dim)
+          per_env_shape = action_shape if isinstance(action_shape, tuple) else ()
           return (
-            2 * torch.rand((env.unwrapped.num_envs,) + action_shape, device=env_device)
+            2
+            * torch.rand(
+              (getattr(env.unwrapped, "num_envs", 1),) + per_env_shape,
+              device=env_device,
+            )
             - 1
           )
 

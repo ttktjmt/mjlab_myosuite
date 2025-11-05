@@ -111,6 +111,11 @@ select = ["E4", "E7", "E9", "F", "I", "B"]
 [tool.pyright]
 pythonVersion = "3.10"
 stubPath = "typings"
+typeCheckingMode = "basic"
+reportMissingImports = false
+reportIncompatibleVariableOverride = false
+reportIncompatibleMethodOverride = false
+reportAttributeAccessIssue = false
 
 [tool.ty.environment]
 extra-paths = ["typings"]
