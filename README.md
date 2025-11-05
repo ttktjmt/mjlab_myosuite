@@ -25,8 +25,8 @@ Run tests:
 ```
 make test          # Run all tests
 make test-fast     # Skip slow integration tests
-uv run pytest
-uv run pyright
+uv run --no-default-groups --group cu128 --group dev pytest
+uv run --no-default-groups --group cu128 --group dev pyright
 ```
 Format code:
 ```
