@@ -1,5 +1,5 @@
 """Wrapper for MyoSuite environments to work with mjlab's training infrastructure."""
-
+import copy
 from typing import Any
 
 import gymnasium as gym
@@ -85,7 +85,7 @@ class MyoSuiteVecEnvWrapper(VecEnv, gym.Env):
       # This ensures each environment is independent (though for MyoSuite they share the same instance)
       def make_env_factory(env_instance):
         """Create a factory that returns the env instance."""
-        return lambda: env_instance
+        return lambda: copy.deepcopy(env_instance)
 
       env_factories = [make_env_factory(env) for _ in range(num_envs)]
       self.env = SyncVectorEnv(env_factories)
