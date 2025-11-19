@@ -1,4 +1,17 @@
-MyoSuite installation instructions:
+# 🚧 Early Prototype — Community Feedback Welcome!
+
+This project is currently in an **early prototype stage**.
+
+Features, architecture, and documentation are actively evolving, and breaking changes are likely as we iterate.
+
+We’re building this openly with the community, so feedback, ideas, and contributions are highly encouraged! If you’d like to help shape the direction of the project:
+
+- Open an issue to share suggestions or report bugs
+- Start a discussion about improvements
+- Submit a pull request with enhancements
+Thank you for helping us improve this project!
+
+## MyoSuite installation instructions:
 
 1. Install MyoSuite:
 
