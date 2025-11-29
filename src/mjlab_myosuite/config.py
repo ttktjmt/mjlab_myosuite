@@ -35,6 +35,7 @@ def get_default_myosuite_rl_cfg() -> RslRlOnPolicyRunnerCfg:
     run_name="",
     max_iterations=1000,
     num_steps_per_env=24,
+    wandb_project="mjlab_myosuite",  # Your WandB project name
     policy=RslRlPpoActorCriticCfg(
       actor_hidden_dims=(256, 256),
       critic_hidden_dims=(256, 256),

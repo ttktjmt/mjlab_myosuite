@@ -31,7 +31,7 @@ classifiers = [
 description = "Isaac Lab API, powered by MuJoCo-Warp, for RL and robotics research."
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "mjlab @ git+https://github.com/mujocolab/mjlab.git",
+    "mjlab @ git+https://github.com/mujocolab/mjlab.git@baf3574",
     "ruff>=0.14.0"
 ]
 
@@ -94,10 +94,7 @@ explicit = true
 mujoco-warp = { git = "https://github.com/google-deepmind/mujoco_warp", rev = "e605c406363805d949b75d50dd5ffb3d79bc3f70"}
 warp-lang = { index = "nvidia", marker = "sys_platform != 'darwin'" }
 mujoco = { index = "mujoco" }
-torch = [
-  { index = "pytorch-cpu", group = "cpu" },
-  { index = "pytorch-cu128", group = "cu128" },
-]
+torch = { index = "pytorch-cu128", marker = "sys_platform != 'darwin'" }
 
 [tool.ruff]
 indent-width = 2
