@@ -1,4 +1,11 @@
-"""Script to record RL agent visualization to .viser file."""
+"""
+Script to record RL agent visualization to .viser file.
+
+Usage:
+  uv run scripts/record.py Mjlab-MyoSuite-myoElbowPose1D6MRandom-v0 \
+    --wandb-run-path team/project/run-id \
+    --output-file recordings/<filename>.viser
+"""
 
 import os
 import sys
@@ -151,7 +158,10 @@ def run_record(task: str, cfg: RecordConfig):
     log_dir = resume_path.parent
 
   if cfg.num_envs is not None:
-    env_cfg.scene.num_envs = cfg.num_envs
+    if hasattr(env_cfg, 'scene'):
+      env_cfg.scene.num_envs = cfg.num_envs
+    elif hasattr(env_cfg, 'num_envs'):
+      env_cfg.num_envs = cfg.num_envs
 
   env = gym.make(task, cfg=env_cfg, device=device)
 
