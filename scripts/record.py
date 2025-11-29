@@ -52,6 +52,7 @@ class RecordConfig:
   env_idx: int = 0
   frame_skip: int = 2
   sleep_duration: float = 0.016
+  random_goals: bool = True
   distance: float = 5.0
   azimuth: float = 45.0
   elevation: float = -20.0
@@ -118,6 +119,11 @@ def run_record(task: str, cfg: RecordConfig):
           if art is None:
             raise RuntimeError("No motion artifact found in the run.")
           env_cfg.commands.motion.motion_file = str(Path(art.download()) / "motion.npz")
+
+    # Set random goal sampling if requested
+    if cfg.random_goals:
+      env_cfg.commands.motion.sampling_mode = "uniform"
+      print("[INFO]: Using random goal sampling (uniform mode)")
 
   log_dir: Optional[Path] = None
   resume_path: Optional[Path] = None
