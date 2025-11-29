@@ -37,7 +37,7 @@ jobs:
 
       - name: Install viser
         run: |
-          uv pip install viser
+          uv tool install viser
 
       - name: Copy recordings to docs
         run: |
@@ -46,7 +46,7 @@ jobs:
 
       - name: Build Viser client
         run: |
-          uv run viser-build-client --out-dir docs/viser-client
+          viser-build-client --out-dir docs/viser-client
 
       - name: Create index.html
         run: |
