@@ -111,12 +111,6 @@ jobs:
               <div class="viewer-container">
                 <iframe src="viser-client/?playbackPath=../recordings/elbow1d6m.viser"></iframe>
               </div>
-              <div class="footer">
-                <p>
-                  Powered by <a href="https://viser.studio" target="_blank">Viser</a> |
-                  <a href="https://github.com/{{ github.repository }}" target="_blank">View on GitHub</a>
-                </p>
-              </div>
             </div>
           </body>
           </html>
