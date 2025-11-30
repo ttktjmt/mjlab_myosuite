@@ -158,15 +158,16 @@ def run_record(task: str, cfg: RecordConfig):
     log_dir = resume_path.parent
 
   if cfg.num_envs is not None:
-    if hasattr(env_cfg, 'scene'):
+    if hasattr(env_cfg, "scene"):
       env_cfg.scene.num_envs = cfg.num_envs
-    elif hasattr(env_cfg, 'num_envs'):
+    elif hasattr(env_cfg, "num_envs"):
       env_cfg.num_envs = cfg.num_envs
 
   env = gym.make(task, cfg=env_cfg, device=device)
 
   # Handle MyoSuite environments differently
   if is_myosuite:
+
     def find_myosuite_wrapper(env_obj):
       """Unwrap environment to find MyoSuiteVecEnvWrapper."""
       current = env_obj
@@ -335,7 +336,9 @@ def run_record(task: str, cfg: RecordConfig):
 
       # Progress indicator
       if (step + 1) % 100 == 0:
-        print(f"[INFO]: Recorded {step + 1}/{cfg.num_steps} steps ({frame_count} frames)")
+        print(
+          f"[INFO]: Recorded {step + 1}/{cfg.num_steps} steps ({frame_count} frames)"
+        )
 
   # Save recording
   output_path = Path(cfg.output_file)
