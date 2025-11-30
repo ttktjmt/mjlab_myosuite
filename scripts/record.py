@@ -7,7 +7,6 @@ Usage:
     --output-file recordings/<filename>.viser
 """
 
-import os
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -26,6 +25,7 @@ except ImportError:
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+from mjlab.sim.sim import Simulation
 from mjlab.tasks.tracking.rl import MotionTrackingOnPolicyRunner
 from mjlab.tasks.tracking.tracking_env_cfg import TrackingEnvCfg
 from mjlab.third_party.isaaclab.isaaclab_tasks.utils.parse_cfg import (
@@ -33,7 +33,6 @@ from mjlab.third_party.isaaclab.isaaclab_tasks.utils.parse_cfg import (
 )
 from mjlab.utils.os import get_wandb_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
-from mjlab.sim.sim import Simulation
 from mjlab.viewer.viser_scene import ViserMujocoScene
 from rsl_rl.runners import OnPolicyRunner
 
