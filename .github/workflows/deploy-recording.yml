@@ -48,8 +48,17 @@ jobs:
         run: |
           viser-build-client --out-dir docs/viser-client
 
+      - name: Generate recordings list
+        id: recordings
+        run: |
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          cd recordings
+          ls -1 *.viser 2>/dev/null | jq -R -s -c 'split("\n") | map(select(length > 0))' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create index.html
         run: |
+          RECORDINGS_JSON='${{ steps.recordings.outputs.files }}'
           cat > docs/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
@@ -75,6 +84,36 @@ jobs:
               .description {
                 color: #666;
                 margin-bottom: 20px;
+              }
+              .controls {
+                margin-bottom: 20px;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              }
+              .controls label {
+                display: block;
+                margin-bottom: 8px;
+                font-weight: 600;
+                color: #333;
+              }
+              .controls select {
+                width: 100%;
+                padding: 10px;
+                font-size: 16px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: white;
+                cursor: pointer;
+              }
+              .controls select:hover {
+                border-color: #0066cc;
+              }
+              .controls select:focus {
+                outline: none;
+                border-color: #0066cc;
+                box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
               }
               .viewer-container {
                 background: white;
@@ -108,13 +147,52 @@ jobs:
               <p class="description">
                 3D visualization of trained agent in MyoSuite environment
               </p>
+              <div class="controls">
+                <label for="recording-select">Select Recording:</label>
+                <select id="recording-select">
+                </select>
+              </div>
               <div class="viewer-container">
-                <iframe src="viser-client/?playbackPath=../recordings/elbow1d6m.viser"></iframe>
+                <iframe id="viewer-iframe" src=""></iframe>
               </div>
             </div>
+            <script>
+              const recordings = RECORDINGS_PLACEHOLDER;
+              const select = document.getElementById('recording-select');
+              const iframe = document.getElementById('viewer-iframe');
+
+              // Populate select options
+              recordings.forEach((file, index) => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file.replace('.viser', '');
+                select.appendChild(option);
+              });
+
+              // Load recording function
+              function loadRecording(filename) {
+                if (filename) {
+                  iframe.src = `viser-client/?playbackPath=../recordings/${filename}`;
+                }
+              }
+
+              // Handle selection change
+              select.addEventListener('change', (e) => {
+                loadRecording(e.target.value);
+              });
+
+              // Load first recording by default
+              if (recordings.length > 0) {
+                select.value = recordings[0];
+                loadRecording(recordings[0]);
+              }
+            </script>
           </body>
           </html>
           EOF
+
+          # Replace placeholder with actual recordings JSON
+          sed -i "s|RECORDINGS_PLACEHOLDER|${RECORDINGS_JSON}|g" docs/index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
