@@ -101,13 +101,15 @@ def run_record(task: str, cfg: RecordConfig):
 
       api = wandb.Api()
       artifact = api.artifact(registry_name)
-      env_cfg.commands.motion.motion_file = str(
-        Path(artifact.download()) / "motion.npz"
-      )
+      if env_cfg.commands is not None:
+        env_cfg.commands.motion.motion_file = str(
+          Path(artifact.download()) / "motion.npz"
+        )
     else:
       if cfg.motion_file is not None:
         print(f"[INFO]: Using motion file from CLI: {cfg.motion_file}")
-        env_cfg.commands.motion.motion_file = cfg.motion_file
+        if env_cfg.commands is not None:
+          env_cfg.commands.motion.motion_file = cfg.motion_file
       else:
         import wandb
 
@@ -124,10 +126,11 @@ def run_record(task: str, cfg: RecordConfig):
           )
           if art is None:
             raise RuntimeError("No motion artifact found in the run.")
-          env_cfg.commands.motion.motion_file = str(Path(art.download()) / "motion.npz")
+          if env_cfg.commands is not None:
+            env_cfg.commands.motion.motion_file = str(Path(art.download()) / "motion.npz")
 
     # Set random goal sampling if requested
-    if cfg.random_goals:
+    if cfg.random_goals and env_cfg.commands is not None:
       env_cfg.commands.motion.sampling_mode = "uniform"
       print("[INFO]: Using random goal sampling (uniform mode)")
 
