@@ -31,7 +31,7 @@ classifiers = [
 description = "Isaac Lab API, powered by MuJoCo-Warp, for RL and robotics research."
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "mjlab @ git+https://github.com/mujocolab/mjlab.git@baf3574",
+    "mjlab @ git+https://github.com/mujocolab/mjlab.git@baf35743050b4ec63bde3f33d54feccad80a55d0",
     "ruff>=0.14.0"
 ]
 
