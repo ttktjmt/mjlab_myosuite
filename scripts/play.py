@@ -158,12 +158,17 @@ def run_play(task: str, cfg: PlayConfig):
       )
     log_dir = resume_path.parent
 
-  if cfg.num_envs is not None:
-    env_cfg.scene.num_envs = cfg.num_envs
-  if cfg.video_height is not None:
-    env_cfg.viewer.height = cfg.video_height
-  if cfg.video_width is not None:
-    env_cfg.viewer.width = cfg.video_width
+  if cfg.num_envs is not None: 
+      if is_myosuite and (MyoSuiteEnvCfg is not None) and isinstance(env_cfg, MyoSuiteEnvCfg):
+          env_cfg.num_envs = cfg.num_envs
+      else:
+          env_cfg.scene.num_envs = cfg. num_envs
+  
+  if not is_myosuite: 
+      if cfg.video_height is not None:
+          env_cfg.viewer.height = cfg. video_height
+      if cfg. video_width is not None: 
+          env_cfg.viewer.width = cfg.video_width
 
   render_mode = "rgb_array" if (TRAINED_MODE and cfg.video) else None
   if cfg.video and DUMMY_MODE:
