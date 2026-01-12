@@ -1,9 +1,6 @@
 from mjlab.tasks.registry import register_mjlab_task
 
-from .die_reorient_env_cfg import (
-    die_reorient_env_cfg,
-    DieReorientRlCfg
-)
+from .die_reorient_env_cfg import die_reorient_env_cfg, DieReorientRlCfg
 
 from rsl_rl.runners import OnPolicyRunner
 

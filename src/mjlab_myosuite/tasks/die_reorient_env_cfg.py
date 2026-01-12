@@ -23,7 +23,11 @@ from mjlab.managers.manager_term_config import (
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.scene import SceneCfg
 from mjlab.terrains import TerrainImporterCfg
-from mjlab.rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+from mjlab.rl import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlPpoActorCriticCfg,
+    RslRlPpoAlgorithmCfg,
+)
 from mjlab.utils.lab_api.math import sample_uniform
 from mjlab.envs.mdp.actions import JointAction
 
@@ -36,185 +40,186 @@ from mjlab_myosuite.robot.myohand_constants import (
 # Scene configuration
 SCENE_CFG = SceneCfg(
     terrain=TerrainImporterCfg(terrain_type="plane"),
-    num_envs=512,  # Number of parallel environments
+    num_envs=4,  # Number of parallel environments
     extent=2.0,
 )
 
 
 # ============ Rotation Utilities ============
 
+
 def euler_to_quat(euler: torch.Tensor) -> torch.Tensor:
     """Convert Euler angles (roll, pitch, yaw) to quaternion (w, x, y, z).
-    
+
     Args:
         euler: Tensor of shape (..., 3) with [roll, pitch, yaw] in radians
-    
+
     Returns:
         Quaternion tensor of shape (..., 4) with [w, x, y, z]
     """
     roll, pitch, yaw = euler[..., 0], euler[..., 1], euler[..., 2]
-    
+
     cy = torch.cos(yaw * 0.5)
     sy = torch.sin(yaw * 0.5)
     cp = torch.cos(pitch * 0.5)
     sp = torch.sin(pitch * 0.5)
     cr = torch.cos(roll * 0.5)
     sr = torch.sin(roll * 0.5)
-    
+
     w = cr * cp * cy + sr * sp * sy
     x = sr * cp * cy - cr * sp * sy
     y = cr * sp * cy + sr * cp * sy
     z = cr * cp * sy - sr * sp * cy
-    
+
     return torch.stack([w, x, y, z], dim=-1)
 
 
 def quat_to_euler(quat: torch.Tensor) -> torch.Tensor:
     """Convert quaternion (w, x, y, z) to Euler angles (roll, pitch, yaw).
-    
+
     Args:
         quat: Tensor of shape (..., 4) with [w, x, y, z]
-    
+
     Returns:
         Euler angles tensor of shape (..., 3) with [roll, pitch, yaw] in radians
     """
     w, x, y, z = quat[..., 0], quat[..., 1], quat[..., 2], quat[..., 3]
-    
+
     # Roll (x-axis rotation)
     sinr_cosp = 2 * (w * x + y * z)
     cosr_cosp = 1 - 2 * (x * x + y * y)
     roll = torch.atan2(sinr_cosp, cosr_cosp)
-    
+
     # Pitch (y-axis rotation)
     sinp = 2 * (w * y - z * x)
     sinp = torch.clamp(sinp, -1.0, 1.0)
     pitch = torch.asin(sinp)
-    
+
     # Yaw (z-axis rotation)
     siny_cosp = 2 * (w * z + x * y)
     cosy_cosp = 1 - 2 * (y * y + z * z)
     yaw = torch.atan2(siny_cosp, cosy_cosp)
-    
+
     return torch.stack([roll, pitch, yaw], dim=-1)
 
 
 def quat_distance(q1: torch.Tensor, q2: torch.Tensor) -> torch.Tensor:
     """Compute angular distance between two quaternions.
-    
+
     Args:
         q1: First quaternion (..., 4)
         q2: Second quaternion (..., 4)
-    
+
     Returns:
         Angular distance in radians (...,)
     """
     # Normalize quaternions
     q1 = q1 / (torch.norm(q1, dim=-1, keepdim=True) + 1e-8)
     q2 = q2 / (torch.norm(q2, dim=-1, keepdim=True) + 1e-8)
-    
+
     # Compute dot product
     dot = torch.abs(torch.sum(q1 * q2, dim=-1))
     dot = torch.clamp(dot, -1.0, 1.0)
-    
+
     # Angular distance
     return 2 * torch.acos(dot)
 
 
 def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     """Create MyoHand Die Reorientation environment configuration.
-    
+
     Args:
         play: If True, creates a play configuration (no randomization, longer episodes)
-    
+
     Returns:
         ManagerBasedRlEnvCfg: Environment configuration for die reorientation task
     """
 
     ################# Observations #################
-    
+
     # Initialize cached body/site IDs (will be populated on first use)
     _body_site_ids = {}
-    
+
     def _get_body_site_ids(env: ManagerBasedRlEnv) -> dict:
         """Get and cache body/site IDs from MuJoCo model."""
         if not _body_site_ids:
             model = env.sim.model
             # Initialize all keys with -1 (not found)
-            _body_site_ids['object_bid'] = -1
-            _body_site_ids['goal_bid'] = -1
-            _body_site_ids['object_sid'] = -1
-            _body_site_ids['goal_sid'] = -1
-            
+            _body_site_ids["object_bid"] = -1
+            _body_site_ids["goal_bid"] = -1
+            _body_site_ids["object_sid"] = -1
+            _body_site_ids["goal_sid"] = -1
+
             try:
                 # Try to find die/object body
-                for name in ['Object', 'object', 'die', 'Die']:
+                for name in ["Object", "object", "die", "Die"]:
                     try:
-                        _body_site_ids['object_bid'] = model.body(name).id
+                        _body_site_ids["object_bid"] = model.body(name).id
                         break
                     except Exception:
                         pass
-                
+
                 # Try to find goal/target body
-                for name in ['target', 'Target', 'goal', 'Goal']:
+                for name in ["target", "Target", "goal", "Goal"]:
                     try:
-                        _body_site_ids['goal_bid'] = model.body(name).id
+                        _body_site_ids["goal_bid"] = model.body(name).id
                         break
                     except Exception:
                         pass
-                
+
                 # Try to find object site
-                for name in ['object_o', 'object', 'Object']:
+                for name in ["object_o", "object", "Object"]:
                     try:
-                        _body_site_ids['object_sid'] = model.site(name).id
+                        _body_site_ids["object_sid"] = model.site(name).id
                         break
                     except Exception:
                         pass
-                
+
                 # Try to find goal site
-                for name in ['target_o', 'target', 'goal']:
+                for name in ["target_o", "target", "goal"]:
                     try:
-                        _body_site_ids['goal_sid'] = model.site(name).id
+                        _body_site_ids["goal_sid"] = model.site(name).id
                         break
                     except Exception:
                         pass
-                        
+
             except Exception as e:
                 print(f"Warning: Could not find all body/site IDs: {e}")
-        
+
         return _body_site_ids
-    
+
     def get_die_position(env: ManagerBasedRlEnv) -> torch.Tensor:
         """Get die center position."""
         ids = _get_body_site_ids(env)
-        if ids['object_sid'] >= 0:
+        if ids["object_sid"] >= 0:
             # Use site position if available (more accurate)
-            pos_idx = ids['object_sid']
+            pos_idx = ids["object_sid"]
             return env.sim.data.site_xpos[:, pos_idx, :]
-        elif ids['object_bid'] >= 0:
+        elif ids["object_bid"] >= 0:
             # Fall back to body position
-            pos_idx = ids['object_bid']
+            pos_idx = ids["object_bid"]
             return env.sim.data.xpos[:, pos_idx, :]
         else:
             # Last resort: assume die is last body
             return env.sim.data.xpos[:, -1, :]
-    
+
     def get_die_quat(env: ManagerBasedRlEnv) -> torch.Tensor:
         """Get die orientation as quaternion (w, x, y, z)."""
         ids = _get_body_site_ids(env)
-        if ids['object_bid'] >= 0:
-            quat_idx = ids['object_bid']
+        if ids["object_bid"] >= 0:
+            quat_idx = ids["object_bid"]
         else:
             # Assume die is last body with quaternion
             # qpos typically: [hand_joints..., die_pos_x, die_pos_y, die_pos_z, die_quat_w, die_quat_x, die_quat_y, die_quat_z]
             quat_idx = -1
-        
+
         # Get quaternion from xquat (body quaternions)
         return env.sim.data.xquat[:, quat_idx, :]
-    
+
     def get_goal_quat(env: ManagerBasedRlEnv) -> torch.Tensor:
         """Get goal orientation as quaternion."""
         # Goal is stored in environment state
-        if not hasattr(env, '_goal_quat'):
+        if not hasattr(env, "_goal_quat"):
             # Initialize with identity quaternion
             env._goal_quat = torch.zeros((env.num_envs, 4), device=env.device)
             env._goal_quat[:, 0] = 1.0  # w = 1
@@ -257,11 +262,11 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     }
 
     #################### Actions ###################
-    
+
     # Custom action class for muscle actuators
     class MuscleAction(JointAction):
         """Direct muscle actuator control."""
-        
+
         def __init__(self, cfg: ActionTermCfg, env: ManagerBasedRlEnv):
             # Initialize without calling parent __init__ to avoid joint lookup
             self.cfg = cfg
@@ -269,27 +274,31 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             self._asset = env.scene[cfg.asset_name]
             self._num_actuators = env.sim.model.nu
             # Initialize action buffers
-            self._processed_actions = torch.zeros(env.num_envs, self._num_actuators, device=env.device)
-            self._raw_actions = torch.zeros(env.num_envs, self._num_actuators, device=env.device)
-            
+            self._processed_actions = torch.zeros(
+                env.num_envs, self._num_actuators, device=env.device
+            )
+            self._raw_actions = torch.zeros(
+                env.num_envs, self._num_actuators, device=env.device
+            )
+
         @property
         def action_dim(self) -> int:
             return self._num_actuators
-        
+
         @property
         def raw_actions(self) -> torch.Tensor:
             return self._raw_actions
-        
+
         def process_actions(self, actions: torch.Tensor):
             # Store raw actions
             self._raw_actions[:] = actions
             # Clip actions to [0, 1] range for muscle activations
             self._processed_actions = torch.clamp(actions, 0.0, 1.0)
-        
+
         def apply_actions(self):
             # Directly set actuator controls
             self._env.sim.data.ctrl[:, :] = self._processed_actions
-        
+
         def reset(self, env_ids: torch.Tensor | None = None):
             # Reset actions to zero
             if env_ids is None:
@@ -298,7 +307,7 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             else:
                 self._raw_actions[env_ids] = 0.0
                 self._processed_actions[env_ids] = 0.0
-    
+
     # MyoHand uses muscle activations [0, 1]
     actions: dict[str, ActionTermCfg] = {
         "muscles": ActionTermCfg(
@@ -308,14 +317,14 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     }
 
     #################### Events ####################
-    
+
     def reset_die_and_goal(
         env: ManagerBasedRlEnv,
         env_ids: torch.Tensor,
     ) -> None:
         """Reset die and goal orientations."""
         n = len(env_ids)
-        
+
         # Sample random goal orientations (Phase 1: limited range +-90 degrees)
         if play:
             # Fixed goal for playing
@@ -323,47 +332,51 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             goal_euler[:, 2] = 0.785  # 45 degrees around Z
         else:
             # Random goal within Phase 1 constraints (±90 degrees)
-            goal_euler = sample_uniform(
-                -1.57, 1.57,
-                (n, 3),
-                device=env.device
-            )
-        
+            goal_euler = sample_uniform(-1.57, 1.57, (n, 3), device=env.device)
+
         # Convert to quaternion and store
         goal_quat = euler_to_quat(goal_euler)
-        if not hasattr(env, '_goal_quat'):
+        if not hasattr(env, "_goal_quat"):
             env._goal_quat = torch.zeros((env.num_envs, 4), device=env.device)
             env._goal_quat[:, 0] = 1.0  # Initialize with identity
         env._goal_quat[env_ids] = goal_quat
-        
+
         # Reset hand joints to small random values (open hand)
         hand_dof = env.sim.data.qpos.shape[1] - 7  # Exclude die (3 pos + 4 quat)
         env.sim.data.qpos[env_ids, :hand_dof] = sample_uniform(
-            -0.05, 0.05,
-            (n, hand_dof),
-            device=env.device
+            -0.05, 0.05, (n, hand_dof), device=env.device
         )
-        
+
         # Reset die position (on palm, approximately)
         die_pos_start = hand_dof  # Die position starts after hand joints
-        env.sim.data.qpos[env_ids, die_pos_start:die_pos_start+3] = torch.tensor(
-            [0.015, 0.025, 0.025],  # x, y, z on palm
-            device=env.device
-        ).unsqueeze(0).expand(n, -1)
-        
+        env.sim.data.qpos[env_ids, die_pos_start : die_pos_start + 3] = (
+            torch.tensor(
+                [0.015, 0.025, 0.025],  # x, y, z on palm
+                device=env.device,
+            )
+            .unsqueeze(0)
+            .expand(n, -1)
+        )
+
         # Reset die orientation to identity (or slight random)
         die_quat_start = die_pos_start + 3
         if play:
             # Identity quaternion
-            env.sim.data.qpos[env_ids, die_quat_start:die_quat_start+4] = torch.tensor(
-                [1.0, 0.0, 0.0, 0.0],  # w, x, y, z
-                device=env.device
-            ).unsqueeze(0).expand(n, -1)
+            env.sim.data.qpos[env_ids, die_quat_start : die_quat_start + 4] = (
+                torch.tensor(
+                    [1.0, 0.0, 0.0, 0.0],  # w, x, y, z
+                    device=env.device,
+                )
+                .unsqueeze(0)
+                .expand(n, -1)
+            )
         else:
             # Small random orientation
             small_euler = sample_uniform(-0.2, 0.2, (n, 3), device=env.device)
-            env.sim.data.qpos[env_ids, die_quat_start:die_quat_start+4] = euler_to_quat(small_euler)
-        
+            env.sim.data.qpos[env_ids, die_quat_start : die_quat_start + 4] = (
+                euler_to_quat(small_euler)
+            )
+
         # Reset all velocities to zero
         env.sim.data.qvel[env_ids, :] = 0.0
 
@@ -375,42 +388,42 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     }
 
     #################### Rewards ###################
-    
+
     def orientation_reward(env: ManagerBasedRlEnv) -> torch.Tensor:
         """Reward for die orientation matching goal orientation.
-        
+
         Uses quaternion distance.
         """
         die_quat = get_die_quat(env)
         goal_quat = get_goal_quat(env)
-        
+
         # Compute angular distance
         ang_dist = quat_distance(die_quat, goal_quat)
-        
+
         # Convert to reward: 1.0 when aligned, 0 when 90 degrees off
         # Use exponential decay
         reward = torch.exp(-ang_dist / 0.5)
-        
+
         return reward
-    
+
     def position_reward(env: ManagerBasedRlEnv, std: float = 0.05) -> torch.Tensor:
         """Reward for keeping die on palm (not dropping)."""
         die_pos = get_die_position(env)
-        
+
         # Target position is on palm center
         target_pos = torch.tensor([0.015, 0.025, 0.025], device=env.device)
         target_pos = target_pos.unsqueeze(0).expand(env.num_envs, -1)
-        
+
         # Distance from target position
         pos_dist = torch.norm(die_pos - target_pos, dim=-1)
-        
+
         # Gaussian reward
-        return torch.exp(-pos_dist**2 / (2 * std**2))
-    
+        return torch.exp(-(pos_dist**2) / (2 * std**2))
+
     def action_regularization(env: ManagerBasedRlEnv) -> torch.Tensor:
         """Penalize large muscle activations."""
         # Get last action
-        if hasattr(env, 'action_manager'):
+        if hasattr(env, "action_manager"):
             try:
                 act = env.action_manager.get_term("muscles").raw_actions
             except Exception:
@@ -418,7 +431,7 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 act = torch.zeros((env.num_envs, 1), device=env.device)
         else:
             act = torch.zeros((env.num_envs, 1), device=env.device)
-        
+
         return -torch.mean(act**2, dim=-1)
 
     rewards = {
@@ -438,22 +451,22 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     }
 
     ################# Terminations #################
-    
+
     def check_die_dropped(env: ManagerBasedRlEnv, drop_th: float = 0.1) -> torch.Tensor:
         """Check if die has dropped (fallen off hand)."""
         die_pos = get_die_position(env)
-        
+
         # Check if die is too far from palm in X-Y plane or too low in Z
         palm_center = torch.tensor([0.015, 0.025, 0.025], device=env.device)
         palm_center = palm_center.unsqueeze(0).expand(env.num_envs, -1)
-        
+
         # Distance from palm center
         xy_dist = torch.norm(die_pos[:, :2] - palm_center[:, :2], dim=-1)
         z_pos = die_pos[:, 2]
-        
+
         # Dropped if too far from palm or below ground
         dropped = (xy_dist > drop_th) | (z_pos < 0.0)
-        
+
         return dropped
 
     terminations = {
@@ -479,7 +492,9 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         rewards=rewards,
         terminations=terminations,
         decimation=5,  # Control at 100 Hz (500 Hz sim / 5)
-        episode_length_s=6.0 if not play else 20.0,  # 6 seconds for training, 20 for play
+        episode_length_s=6.0
+        if not play
+        else 20.0,  # 6 seconds for training, 20 for play
     )
 
     # Set the entity
@@ -491,7 +506,7 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 @dataclass
 class DieReorientRlCfg(RslRlOnPolicyRunnerCfg):
     """RL training configuration for Die Reorientation task."""
-    
+
     policy: RslRlPpoActorCriticCfg = field(
         default_factory=lambda: RslRlPpoActorCriticCfg(
             init_noise_std=0.5,

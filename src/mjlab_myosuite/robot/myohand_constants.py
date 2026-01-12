@@ -11,7 +11,15 @@ from mjlab.viewer import ViewerConfig
 # Try to use MyoSuite's XML if available, otherwise use a fallback
 try:
     import myosuite
-    MYOHAND_DIE_XML = Path(myosuite.__file__).parent / "envs" / "myo" / "assets" / "hand" / "myohand_die.xml"
+
+    MYOHAND_DIE_XML = (
+        Path(myosuite.__file__).parent
+        / "envs"
+        / "myo"
+        / "assets"
+        / "hand"
+        / "myohand_die.xml"
+    )
 except ImportError:
     # Fallback path if myosuite is not installed
     MYOHAND_DIE_XML = Path(os.path.dirname(__file__)) / "assets" / "myohand_die.xml"
