@@ -4,12 +4,18 @@ build-backend = "uv_build"
 
 [project]
 name = "mjlab-myosuite"
-version = "0.0.0"
-description = "Mjlab MyoSuite example"
+version = "0.1.0"
+description = "MyoSuite MyoHand Die Reorientation task for mjlab"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "mjlab",
     "myosuite",
+    "numpy",
+    "torch",
+]
+readme = "README.md"
+authors = [
+    {name = "mjlab_myosuite contributors"}
 ]
 
 [project.entry-points."mjlab.tasks"]

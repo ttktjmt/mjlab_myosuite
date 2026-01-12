@@ -1,17 +1,17 @@
 from mjlab.tasks.registry import register_mjlab_task
 
-from .myohand_manipulation_env_cfg import (
-    myohand_manipulation_env_cfg,
-    MyohandRlCfg
+from .die_reorient_env_cfg import (
+    die_reorient_env_cfg,
+    DieReorientRlCfg
 )
 
 from rsl_rl.runners import OnPolicyRunner
-# from mjlab.tasks.velocity.rl.runner import VelocityOnPolicyRunner
 
+# MyoChallenge 2022 Die Reorientation Task (Phase 1)
 register_mjlab_task(
-    task_id="Myosuite-Manipulation-Myohand-Reorientation",
-    env_cfg=myohand_manipulation_env_cfg(reverse_knee=False),
-    play_env_cfg=myohand_manipulation_env_cfg(reverse_knee=False, play=True),
-    rl_cfg=MyohandRlCfg(max_iterations=50_000),
+    task_id="Myosuite-Manipulation-DieReorient-Myohand",
+    env_cfg=die_reorient_env_cfg(play=False),
+    play_env_cfg=die_reorient_env_cfg(play=True),
+    rl_cfg=DieReorientRlCfg(max_iterations=50_000),
     runner_cls=OnPolicyRunner,
 )
