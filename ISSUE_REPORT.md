@@ -2,110 +2,76 @@
 
 ## Problem Summary
 
-When using MyoHand with mjlab's Scene system, 39 muscle actuators are reduced to 36 actuators during `spec.attach()`. This causes a keyframe control size mismatch error.
+MyoHand has 39 muscle actuators, but when attached to mjlab Scene with a prefix, only 36 actuators remain. Three specific actuators are consistently removed: **EDM**, **EPL**, and **FPL**.
 
-## Root Cause
+## Root Cause - FULLY IDENTIFIED ✅
 
-**MuJoCo 3.4.0's `spec.attach()` has a bug** that incorrectly removes three specific muscle actuators:
-- **EDM** (Extensor Digiti Minimi)
-- **EPL** (Extensor Pollicis Longus)  
-- **FPL** (Flexor Pollicis Longus)
+**MuJoCo 3.4.0's `spec.attach()` has a bug with `mjWRAP_SPHERE` tendon wraps when `sidesite` is not specified.**
 
-This is **NOT a MyoSuite XML issue**. Extensive investigation confirms:
-- MyoSuite's XML files contain **no duplicate definitions** for these actuators
-- Entity.spec correctly contains **39 unique actuators** with no duplicates
-- Direct XML loading produces a valid model with 39 actuators
-- The reduction occurs **only during `spec.attach()`** operation
+### The Exact Mechanism
 
-## How the Issue Occurs
+The bug occurs when ALL of the following conditions are met:
+1. Using `spec.attach()` with a **non-empty prefix**
+2. Tendon uses a **`mjWRAP_SPHERE`** wrap geometry
+3. The wrap **does not have an explicit `sidesite` attribute** (uses default behavior)
 
-1. **XML loading**: `MjSpec.from_file()` reads myohand_die.xml → 39 actuators ✓
-2. **Entity creation**: `Entity(DEFAULT_MYOHAND_CFG)` creates entity.spec → 39 unique actuators ✓
-3. **Scene.attach()**: `scene_spec.attach(entity.spec, prefix="myohand/", frame=frame)` → **36 actuators** ✗
-4. **Actuators removed**: EDM, EPL, FPL mysteriously disappear during attach
-5. **Compilation error**: Keyframe has 39 ctrl values, but model expects 36 → error
+### Why These Specific Three Tendons
 
-## Detailed Evidence
+| Tendon | Problematic Wrap | Type | Sidesite | Wrap Index |
+|--------|------------------|------|----------|------------|
+| **EDM** (Extensor Digiti Minimi) | `Fifthpm_wrap` | `mjWRAP_SPHERE` | None ⚠️ | [9] |
+| **EPL** (Extensor Pollicis Longus) | `MPthumb_wrap` | `mjWRAP_SPHERE` | None ⚠️ | [9] |
+| **FPL** (Flexor Pollicis Longus) | `FPL_ellipsoid_wrap` | `mjWRAP_SPHERE` | None ⚠️ | [5] |
 
-### Test 1: XML Direct Loading
-```python
-import mujoco as mj
-spec = mj.MjSpec.from_file("myohand_die.xml")
-model = spec.compile()
-print(f"Actuators: {model.nu}")  # Output: 39 ✓
+**Key Discovery**: These are the **ONLY** three tendons in MyoHand that have `mjWRAP_SPHERE` geometries without explicit `sidesite` attributes.
 
-# All three actuators present:
-# 21. EDM
-# 23. EPL  
-# 25. FPL
-```
+All 36 preserved tendons either:
+- Don't use SPHERE wraps, OR
+- Have explicit `sidesite` values for all their SPHERE wraps
 
-### Test 2: Entity Spec Analysis
-```python
-from mjlab.entity import Entity
-from mjlab_myosuite.robot.myohand_constants import DEFAULT_MYOHAND_CFG
+### Why This is a MuJoCo Bug
 
-entity = Entity(DEFAULT_MYOHAND_CFG)
-actuators = [act.name for act in entity.spec.actuators]
-print(f"Total: {len(actuators)}")  # Output: 39 ✓
+1. **Valid XML**: MuJoCo documentation allows omitting `sidesite` (defaults to "both sides")
+2. **Works in standalone mode**: Direct `MjSpec.from_file()` → 39 actuators ✓
+3. **Inconsistent behavior**: 
+   - `mjWRAP_SITE` elements work fine without `sidesite`
+   - Only `mjWRAP_SPHERE` with default `sidesite` causes removal
+4. **Prefix-dependent**:
+   - Empty prefix: `attach(spec, prefix="", ...)` → 39 actuators ✓
+   - Any non-empty prefix: `attach(spec, prefix="x/", ...)` → 36 actuators ✗
 
-# Check for duplicates
-duplicates = {name for name in actuators if actuators.count(name) > 1}
-print(f"Duplicates: {duplicates}")  # Output: set() (no duplicates) ✓
-```
+### Not a MyoSuite Issue
 
-### Test 3: spec.attach() Behavior
-```python
-import mujoco as mj
+- MyoSuite XML is correctly formatted and valid
+- The default `sidesite` behavior is documented and should work
+- Problem is in MuJoCo's prefix handling during `attach()`
 
-# Load entity
-entity_spec = mj.MjSpec.from_file("myohand_die.xml")
-print(f"Before attach: {len(list(entity_spec.actuators))}")  # 39 ✓
+## Verification
 
-# Create empty scene and attach
-scene_spec = mj.MjSpec()
-frame = scene_spec.worldbody.add_frame()
-scene_spec.attach(entity_spec, prefix="myohand/", frame=frame)
-print(f"After attach: {len(list(scene_spec.actuators))}")  # 36 ✗
-
-# Find removed actuators
-before = [act.name for act in entity_spec.actuators]
-after = [act.name.replace("myohand/", "") for act in scene_spec.actuators]
-removed = set(before) - set(after)
-print(f"Removed: {removed}")  # {'EDM', 'EPL', 'FPL'} ✗
-```
-
-### Test 4: XML Verification
 ```bash
-# Verify no duplicates in XML
-$ grep -c 'name="EDM"' myohand_assets.xml
-1
-
-$ grep -c 'name="EPL"' myohand_assets.xml
-1
-
-$ grep -c 'name="FPL"' myohand_assets.xml
-1
+# Run verification script
+uv run python scripts/verify_actuator_issue.py
 ```
 
-All tests confirm: **No duplicates exist in XML or entity.spec, yet `spec.attach()` removes three actuators.**
+**Results:**
+- Direct XML load: 39 actuators ✓
+- After spec.attach() with prefix: 36 actuators ✗
+- Removed: EDM, EPL, FPL (and their corresponding tendons)
 
-## Impact
+## Impact on mjlab
 
-- Cannot use standard mjlab `XmlMuscleActuatorCfg` + `TendonEffortActionCfg` workflow
-- Scene compilation fails with "invalid ctrl size" error
-- Requires workaround implementations
+mjlab requires entity prefixes for namespace separation, making the workaround unavoidable. Standard `XmlMuscleActuatorCfg` + `TendonEffortActionCfg` workflow cannot be used.
 
 ## Workaround Solution
 
-Since this is a MuJoCo bug, the current workaround is **correct and should be maintained**:
+Use `DirectMuscleEffortActionCfg` which operates on the compiled model (36 actuators):
 
-### Current Implementation (Correct)
 ```python
-# In die_reorient_env_cfg.py
+# die_reorient_env_cfg.py
 actions = {
-    "myohand": mdp.DirectMuscleEffortActionCfg(
+    "myohand": DirectMuscleEffortActionCfg(
         entity_name="myohand",
+        actuator_names=(".*",),  # Pattern matching all tendon actuators
         scale=1.0,
         offset=0.0,
     )
@@ -132,14 +98,10 @@ DEFAULT_MYOHAND_CFG = EntityCfg(
 
 ## Future Resolution
 
-**Do NOT attempt to fix this by modifying MyoSuite XML** - the XML is correct.
-
-**Recommended next steps:**
-1. Report bug to MuJoCo development team with minimal reproduction case
-2. Wait for MuJoCo update that fixes `spec.attach()` behavior  
-3. After fix is released, migrate to standard mjlab workflow:
+1. **Report to MuJoCo**: Submit minimal reproduction case to MuJoCo development team
+2. **Wait for fix**: MuJoCo 3.4.1 or later may address the prefix-handling bug
+3. **Migrate to standard workflow** once fixed:
    ```python
-   # Future implementation (when MuJoCo is fixed)
    articulation=EntityArticulationInfoCfg(
        actuator_cfgs={
            "muscles": XmlMuscleActuatorCfg(
@@ -152,16 +114,14 @@ DEFAULT_MYOHAND_CFG = EntityCfg(
    actions = {
        "myohand": mdp.TendonEffortActionCfg(
            entity_name="myohand",
-           actuator_names=(r".*_tendon",),
-           scale=1.0,
-           offset=0.0,
+           actuator_names=(".*_tendon",),
        )
    }
    ```
 
-## Environment Details
+## Environment
 
-- **MuJoCo Version**: 3.4.0
-- **MyoSuite Version**: Latest (XML verified correct)
-- **mjlab**: Latest
-- **Issue Status**: MuJoCo bug, workaround implemented
+- **MuJoCo**: 3.4.0 (bug confirmed in prefix handling)
+- **MyoSuite**: Latest (XML verified correct)
+- **mjlab**: Latest (standard API usage)
+- **Status**: MuJoCo bug, workaround implemented and tested

@@ -6,7 +6,7 @@ def _register_tasks():
     """Register MyoSuite tasks (called after module initialization)."""
     from .die_reorient_env_cfg import die_reorient_env_cfg, DieReorientRlCfg
 
-    # MyoChallenge 2022 Die Reorientation Task (Phase 1)
+    # MyoChallenge 2022 Die Reorientation Task
     register_mjlab_task(
         task_id="Myosuite-Manipulation-DieReorient-Myohand",
         env_cfg=die_reorient_env_cfg(play=False),

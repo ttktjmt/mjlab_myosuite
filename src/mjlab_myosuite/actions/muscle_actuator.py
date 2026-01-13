@@ -10,23 +10,21 @@ we bypass the problematic articulation configuration system and maintain full
 See ISSUE_REPORT.md for detailed explanation of the underlying bug.
 """
 
-from dataclasses import MISSING
+from dataclasses import dataclass, MISSING
 import torch
 from typing import Any
 
-from mjlab.managers.action_manager import ActionTerm, ActionTermCfg
+from mjlab.managers.action_manager import ActionTerm
+from mjlab.envs.mdp.actions.actions import BaseActionCfg, BaseAction
 from mjlab.envs import ManagerBasedRlEnv
+from mjlab.actuator.actuator import TransmissionType
 
 
-class DirectMuscleEffortAction(ActionTerm):
+class DirectMuscleEffortAction(BaseAction):
     """Direct muscle effort control action.
     
-    This action term directly applies effort commands to muscle actuators without
-    going through the articulation system. This is necessary as a workaround for
-    MuJoCo 3.4.0's spec.attach() bug.
-    
-    The action values are interpreted as effort commands (normalized to [-1, 1] or [0, 1]
-    depending on muscle properties) and are scaled/offset before being applied.
+    This action term directly applies effort commands to muscle actuators.
+    It extends BaseAction to leverage its actuator finding and scaling capabilities.
     """
 
     cfg: "DirectMuscleEffortActionCfg"
@@ -38,67 +36,11 @@ class DirectMuscleEffortAction(ActionTerm):
             cfg: Configuration for the action term
             env: The environment instance
         """
+        # BaseAction.__init__ handles all the actuator finding and setup
         super().__init__(cfg, env)
-
-        # Get all actuator indices for this entity
-        entity_name = cfg.entity_name
-        model = env.sim.model
         
-        # Find all actuators that belong to this entity
-        # They should have the prefix "entity_name/"
-        self._actuator_indices = []
-        for i in range(model.nu):
-            act_name = model.actuator(i).name
-            # Check if actuator belongs to our entity
-            if act_name.startswith(f"{entity_name}/"):
-                self._actuator_indices.append(i)
-        
-        if len(self._actuator_indices) == 0:
-            raise ValueError(
-                f"No actuators found for entity '{entity_name}'. "
-                f"Available actuators: {[model.actuator(i).name for i in range(model.nu)]}"
-            )
-        
-        # Convert to tensor
-        self._actuator_indices = torch.tensor(
-            self._actuator_indices, dtype=torch.long, device=env.device
-        )
-        
-        # Store scale and offset
-        self._scale = cfg.scale
-        self._offset = cfg.offset
-        
-        # Store action dimension
-        self._num_actuators = len(self._actuator_indices)
-        
-        print(f"[DirectMuscleEffortAction] Initialized with {self._num_actuators} actuators for entity '{entity_name}'")
-
-    @property
-    def action_dim(self) -> int:
-        """Dimension of the action term."""
-        return self._num_actuators
-
-    @property
-    def raw_actions(self) -> torch.Tensor:
-        """Raw action commands before processing."""
-        return self._raw_actions
-
-    @property
-    def processed_actions(self) -> torch.Tensor:
-        """Processed action commands after scaling and offset."""
-        return self._processed_actions
-
-    def process_actions(self, actions: torch.Tensor) -> None:
-        """Process and store raw actions.
-        
-        Args:
-            actions: Raw action tensor of shape (num_envs, num_actuators)
-        """
-        # Store raw actions
-        self._raw_actions = actions.clone()
-        
-        # Apply scaling and offset
-        self._processed_actions = self._scale * actions + self._offset
+        print(f"[DirectMuscleEffortAction] Initialized with {self._num_targets} actuators for entity '{cfg.entity_name}'")
+        print(f"  Actuator names: {self._target_names[:5]}... (showing first 5)")
 
     def apply_actions(self) -> None:
         """Apply processed actions to the simulation.
@@ -110,33 +52,11 @@ class DirectMuscleEffortAction(ActionTerm):
         
         # Set control values for our actuators
         # Shape: (num_envs, num_actuators)
-        ctrl[:, self._actuator_indices] = self._processed_actions
-
-    def reset(self, env_ids: torch.Tensor | None = None) -> None:
-        """Reset action term.
-        
-        Args:
-            env_ids: Environment indices to reset. If None, reset all.
-        """
-        # Initialize raw and processed actions to zero
-        if env_ids is None:
-            env_ids = torch.arange(self._env.num_envs, device=self._env.device)
-        
-        if not hasattr(self, "_raw_actions"):
-            self._raw_actions = torch.zeros(
-                (self._env.num_envs, self._num_actuators),
-                device=self._env.device
-            )
-            self._processed_actions = torch.zeros(
-                (self._env.num_envs, self._num_actuators),
-                device=self._env.device
-            )
-        else:
-            self._raw_actions[env_ids] = 0.0
-            self._processed_actions[env_ids] = 0.0
+        ctrl[:, self._target_ids] = self._processed_actions
 
 
-class DirectMuscleEffortActionCfg(ActionTermCfg):
+@dataclass(kw_only=True)
+class DirectMuscleEffortActionCfg(BaseActionCfg):
     """Configuration for direct muscle effort action.
     
     This configuration allows direct control of muscle actuators without going
@@ -145,17 +65,28 @@ class DirectMuscleEffortActionCfg(ActionTermCfg):
     
     Attributes:
         entity_name: Name of the entity to control (e.g., "myohand")
+        actuator_names: Actuator names pattern (tuple of regex patterns)
         scale: Scaling factor for actions (default: 1.0)
         offset: Offset added to actions (default: 0.0)
     """
 
     class_type: type[ActionTerm] = DirectMuscleEffortAction
 
-    entity_name: str = MISSING
-    """Name of the entity containing the muscle actuators."""
+    # Override actuator_names to make it optional with a default
+    actuator_names: tuple[str, ...] | list[str] = (".*",)
+    """Actuator names pattern (default: all actuators)."""
 
-    scale: float = 1.0
-    """Scaling factor applied to action commands."""
+    def __post_init__(self):
+        """Set transmission type to TENDON for muscle actuators."""
+        self.transmission_type = TransmissionType.TENDON
 
-    offset: float = 0.0
-    """Offset added to action commands after scaling."""
+    def build(self, env: Any) -> ActionTerm:
+        """Build the action term from this config.
+        
+        Args:
+            env: The environment instance
+            
+        Returns:
+            The instantiated action term
+        """
+        return self.class_type(self, env)
