@@ -21,7 +21,13 @@ Train:
 ```bash
 uv run train Myosuite-Manipulation-DieReorient-Myohand --env.scene.num-envs 2048
 # or
-python -m mjlab.train Myosuite-Manipulation-DieReorient-Myohand --env.scene.num-envs 2048
+python -m mjlab.scripts.train Myosuite-Manipulation-DieReorient-Myohand --env.scene.num-envs 2048
+```
+
+**CPU-only mode** (for systems without GPU):
+
+```bash
+python -m mjlab.scripts.train Myosuite-Manipulation-DieReorient-Myohand --gpu-ids None
 ```
 
 Play / Evaluate:

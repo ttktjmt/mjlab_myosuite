@@ -251,6 +251,11 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             concatenate_terms=True,
             enable_corruption=not play,
         ),
+        "critic": ObservationGroupCfg(
+            terms=policy_terms,
+            concatenate_terms=True,
+            enable_corruption=False,
+        ),
     }
 
     #################### Actions ###################

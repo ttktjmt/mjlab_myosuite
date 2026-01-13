@@ -47,12 +47,12 @@ COLLISION_CFG = CollisionCfg(
 # Articulation configuration - MyoHand uses muscle actuators via tendons
 # Using fixed XML (myohand_die_fixed.xml) that preserves all 39 actuators
 MUSCLE_ARTICULATION_CFG = EntityArticulationInfoCfg(
-    actuators=[
+    actuators=(
         XmlMuscleActuatorCfg(
             target_names_expr=MUSCLE_ACTUATOR_NAMES,
             transmission_type=TransmissionType.TENDON,
-        )
-    ],
+        ),
+    ),
 )
 
 # Default MyoHand entity configuration
