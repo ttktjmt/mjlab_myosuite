@@ -3,10 +3,11 @@ import mujoco
 import os
 
 from mjlab.entity import EntityCfg, EntityArticulationInfoCfg
-from mjlab.actuator import XmlMotorActuatorCfg
 from mjlab.utils.spec_config import CollisionCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.viewer import ViewerConfig
+# from mjlab.actuator import XmlMuscleActuatorCfg
+# from mjlab.actuator.actuator import TransmissionType
 
 # Try to use MyoSuite's XML if available, otherwise use a fallback
 try:
@@ -55,10 +56,11 @@ COLLISION_CFG = CollisionCfg(
     friction={r".*": (1.0, 0.005, 0.0001)},  # Default friction
 )
 
-# Articulation configuration - MyoHand uses muscle actuators
-# MyoHand XML already has actuators defined - we don't need to add new ones
+# Articulation configuration - MyoHand uses muscle actuators via tendons
+# NOTE: Empty articulation config when using DirectMuscleEffortActionCfg
+# as workaround for MuJoCo 3.4.0 spec.attach() bug (see ISSUE_REPORT.md)
 MUSCLE_ARTICULATION_CFG = EntityArticulationInfoCfg(
-    actuators=(),  # Empty - use XML actuators as-is
+    actuators=[],  # Empty - using DirectMuscleEffortActionCfg
 )
 
 # Default MyoHand entity configuration
@@ -75,7 +77,7 @@ DEFAULT_MYOHAND_CFG = EntityCfg(
 
 VIEWER_CONFIG = ViewerConfig(
     origin_type=ViewerConfig.OriginType.ASSET_BODY,
-    asset_name="myohand",
+    entity_name="myohand",
     body_name="radius",  # Center camera on radius (forearm bone)
     distance=0.5,
     elevation=-10.0,

@@ -26,7 +26,7 @@ src = ["src/mjlab_myosuite"]
 indent-width = 4
 
 [tool.uv.sources]
-mjlab = { git = "https://github.com/mujocolab/mjlab.git", rev = "5ea83b3" }
+mjlab = { git = "https://github.com/mujocolab/mjlab.git" }
 myosuite = { git = "https://github.com/MyoHub/myosuite.git", branch = "mjx" }
 
 [tool.uv]

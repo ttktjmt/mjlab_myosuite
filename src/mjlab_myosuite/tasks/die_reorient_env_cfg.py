@@ -1,10 +1,6 @@
 """MyoHand Die Reorientation task environment configuration.
 
 Based on MyoChallenge 2022 Die Reorientation Phase 1 task.
-References:
-  - mjlab_upkie: https://github.com/MarcDcls/mjlab_upkie
-  - mjlab_cartpole: https://github.com/Gregwar/mjlab_cartpole
-  - MyoSuite: https://github.com/MyoHub/myosuite/blob/main/myosuite/envs/myo/myochallenge/reorient_v0.py
 """
 
 from dataclasses import dataclass, field
@@ -12,14 +8,11 @@ from copy import deepcopy
 import torch
 
 from mjlab.envs import mdp, ManagerBasedRlEnv, ManagerBasedRlEnvCfg
-from mjlab.managers.manager_term_config import (
-    ActionTermCfg,
-    EventTermCfg,
-    ObservationGroupCfg,
-    ObservationTermCfg,
-    RewardTermCfg,
-    TerminationTermCfg,
-)
+from mjlab.managers.action_manager import ActionTermCfg
+from mjlab.managers.event_manager import EventTermCfg
+from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
+from mjlab.managers.reward_manager import RewardTermCfg
+from mjlab.managers.termination_manager import TerminationTermCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.scene import SceneCfg
 from mjlab.terrains import TerrainImporterCfg
@@ -29,13 +22,13 @@ from mjlab.rl import (
     RslRlPpoAlgorithmCfg,
 )
 from mjlab.utils.lab_api.math import sample_uniform
-from mjlab.envs.mdp.actions import JointAction
 
 from mjlab_myosuite.robot.myohand_constants import (
     DEFAULT_MYOHAND_CFG,
     VIEWER_CONFIG,
     SIM_CFG,
 )
+from mjlab_myosuite.actions import DirectMuscleEffortActionCfg
 
 # Scene configuration
 SCENE_CFG = SceneCfg(
@@ -263,56 +256,15 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
     #################### Actions ###################
 
-    # Custom action class for muscle actuators
-    class MuscleAction(JointAction):
-        """Direct muscle actuator control."""
-
-        def __init__(self, cfg: ActionTermCfg, env: ManagerBasedRlEnv):
-            # Initialize without calling parent __init__ to avoid joint lookup
-            self.cfg = cfg
-            self._env = env
-            self._asset = env.scene[cfg.asset_name]
-            self._num_actuators = env.sim.model.nu
-            # Initialize action buffers
-            self._processed_actions = torch.zeros(
-                env.num_envs, self._num_actuators, device=env.device
-            )
-            self._raw_actions = torch.zeros(
-                env.num_envs, self._num_actuators, device=env.device
-            )
-
-        @property
-        def action_dim(self) -> int:
-            return self._num_actuators
-
-        @property
-        def raw_actions(self) -> torch.Tensor:
-            return self._raw_actions
-
-        def process_actions(self, actions: torch.Tensor):
-            # Store raw actions
-            self._raw_actions[:] = actions
-            # Clip actions to [0, 1] range for muscle activations
-            self._processed_actions = torch.clamp(actions, 0.0, 1.0)
-
-        def apply_actions(self):
-            # Directly set actuator controls
-            self._env.sim.data.ctrl[:, :] = self._processed_actions
-
-        def reset(self, env_ids: torch.Tensor | None = None):
-            # Reset actions to zero
-            if env_ids is None:
-                self._raw_actions[:] = 0.0
-                self._processed_actions[:] = 0.0
-            else:
-                self._raw_actions[env_ids] = 0.0
-                self._processed_actions[env_ids] = 0.0
-
-    # MyoHand uses muscle activations [0, 1]
+    # MyoHand muscle actuators: direct control via DirectMuscleEffortActionCfg
+    # Using DirectMuscleEffortActionCfg as workaround for MuJoCo 3.4.0 spec.attach() bug
+    # that incorrectly removes 3 actuators (EDM, EPL, FPL) during scene creation.
+    # See ISSUE_REPORT.md for details.
     actions: dict[str, ActionTermCfg] = {
-        "muscles": ActionTermCfg(
-            class_type=MuscleAction,
-            asset_name="myohand",
+        "myohand": DirectMuscleEffortActionCfg(
+            entity_name="myohand",
+            scale=1.0,
+            offset=0.0,
         )
     }
 
@@ -422,10 +374,10 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
     def action_regularization(env: ManagerBasedRlEnv) -> torch.Tensor:
         """Penalize large muscle activations."""
-        # Get last action
-        if hasattr(env, "action_manager"):
+        # Get last action from action manager
+        if hasattr(env, "action_manager") and env.action_manager.has_term("myohand"):
             try:
-                act = env.action_manager.get_term("muscles").raw_actions
+                act = env.action_manager.get_term("myohand").raw_actions
             except Exception:
                 # Fallback: use zeros
                 act = torch.zeros((env.num_envs, 1), device=env.device)
