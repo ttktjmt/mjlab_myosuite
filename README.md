@@ -35,7 +35,7 @@ Play / Evaluate:
 ```bash
 uv run play Myosuite-Manipulation-DieReorient-Myohand --checkpoint-file [path-to-checkpoint]
 # or
-python -m mjlab.play Myosuite-Manipulation-DieReorient-Myohand --checkpoint-file [path-to-checkpoint]
+python -m mjlab.scripts.play Myosuite-Manipulation-DieReorient-Myohand --checkpoint-file [path-to-checkpoint]
 ```
 
 Debug (quick agents):
