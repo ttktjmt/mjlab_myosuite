@@ -1,8 +1,5 @@
 """Custom action implementations for MyoSuite environments."""
 
-from .muscle_actuator import DirectMuscleEffortAction, DirectMuscleEffortActionCfg
+# No custom actions - using standard mjlab XmlMuscleActuatorCfg
 
-__all__ = [
-    "DirectMuscleEffortAction",
-    "DirectMuscleEffortActionCfg",
-]
+__all__ = []

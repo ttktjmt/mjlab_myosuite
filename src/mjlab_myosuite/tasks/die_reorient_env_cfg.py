@@ -28,7 +28,6 @@ from mjlab_myosuite.robot.myohand_constants import (
     VIEWER_CONFIG,
     SIM_CFG,
 )
-from mjlab_myosuite.actions import DirectMuscleEffortActionCfg
 
 # Scene configuration
 SCENE_CFG = SceneCfg(
@@ -256,13 +255,13 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
     #################### Actions ###################
 
-    # MyoHand muscle actuators: direct control via DirectMuscleEffortActionCfg
-    # Using DirectMuscleEffortActionCfg as workaround for MuJoCo 3.4.0 spec.attach() bug
-    # that incorrectly removes 3 actuators (EDM, EPL, FPL) during scene creation.
-    # See ISSUE_REPORT.md for details.
+    # MyoHand muscle actuators: controlled via TendonEffortActionCfg
+    # Using fixed XML (myohand_die_fixed.xml) with explicit sidesite attributes
+    # to preserve all 39 muscle actuators. See ISSUE_REPORT.md for details.
     actions: dict[str, ActionTermCfg] = {
-        "myohand": DirectMuscleEffortActionCfg(
+        "myohand": mdp.TendonEffortActionCfg(
             entity_name="myohand",
+            actuator_names=(".*",),
             scale=1.0,
             offset=0.0,
         )
@@ -375,13 +374,10 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     def action_regularization(env: ManagerBasedRlEnv) -> torch.Tensor:
         """Penalize large muscle activations."""
         # Get last action from action manager
-        if hasattr(env, "action_manager") and env.action_manager.has_term("myohand"):
-            try:
-                act = env.action_manager.get_term("myohand").raw_actions
-            except Exception:
-                # Fallback: use zeros
-                act = torch.zeros((env.num_envs, 1), device=env.device)
-        else:
+        try:
+            act = env.action_manager.get_term("myohand").raw_action
+        except (AttributeError, KeyError):
+            # Fallback: use zeros
             act = torch.zeros((env.num_envs, 1), device=env.device)
 
         return -torch.mean(act**2, dim=-1)

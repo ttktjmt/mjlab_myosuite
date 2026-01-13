@@ -6,24 +6,12 @@ from mjlab.entity import EntityCfg, EntityArticulationInfoCfg
 from mjlab.utils.spec_config import CollisionCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.viewer import ViewerConfig
-# from mjlab.actuator import XmlMuscleActuatorCfg
-# from mjlab.actuator.actuator import TransmissionType
+from mjlab.actuator import XmlMuscleActuatorCfg
+from mjlab.actuator.actuator import TransmissionType
 
-# Try to use MyoSuite's XML if available, otherwise use a fallback
-try:
-    import myosuite
-
-    MYOHAND_DIE_XML = (
-        Path(myosuite.__file__).parent
-        / "envs"
-        / "myo"
-        / "assets"
-        / "hand"
-        / "myohand_die.xml"
-    )
-except ImportError:
-    # Fallback path if myosuite is not installed
-    MYOHAND_DIE_XML = Path(os.path.dirname(__file__)) / "assets" / "myohand_die.xml"
+# Use fixed MyoHand XML with sidesite attributes to work around MuJoCo 3.4.0 bug
+# See ISSUE_REPORT.md for details on the spec.attach() prefix bug
+MYOHAND_DIE_XML = Path(os.path.dirname(__file__)) / "assets" / "myohand_die_fixed.xml"
 
 if not MYOHAND_DIE_XML.exists():
     raise FileNotFoundError(f"MyoHand Die XML not found at {MYOHAND_DIE_XML}")
@@ -35,8 +23,8 @@ def get_myohand_spec() -> mujoco.MjSpec:
 
 
 # MyoHand has 39 muscle actuators (ECRL, ECRB, ECU, FCR, FCU, etc.)
-# These are already defined in the XML file
-# We use XmlMotorActuatorCfg to load them from the XML
+# These are defined in the myohand_assets_fixed.xml file
+# Use XmlMuscleActuatorCfg to load them from the XML
 MUSCLE_ACTUATOR_NAMES = (".*",)  # Match all actuators with regex
 
 # Initial hand pose: palm facing up (fingers open)
@@ -57,10 +45,14 @@ COLLISION_CFG = CollisionCfg(
 )
 
 # Articulation configuration - MyoHand uses muscle actuators via tendons
-# NOTE: Empty articulation config when using DirectMuscleEffortActionCfg
-# as workaround for MuJoCo 3.4.0 spec.attach() bug (see ISSUE_REPORT.md)
+# Using fixed XML (myohand_die_fixed.xml) that preserves all 39 actuators
 MUSCLE_ARTICULATION_CFG = EntityArticulationInfoCfg(
-    actuators=[],  # Empty - using DirectMuscleEffortActionCfg
+    actuators=[
+        XmlMuscleActuatorCfg(
+            target_names_expr=MUSCLE_ACTUATOR_NAMES,
+            transmission_type=TransmissionType.TENDON,
+        )
+    ],
 )
 
 # Default MyoHand entity configuration
