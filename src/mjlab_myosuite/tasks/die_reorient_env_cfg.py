@@ -445,9 +445,7 @@ def die_reorient_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         rewards=rewards,
         terminations=terminations,
         decimation=5,  # Control at 100 Hz (500 Hz sim / 5)
-        episode_length_s=6.0
-        if not play
-        else 20.0,  # 6 seconds for training, 20 for play
+        episode_length_s=6.0 if not play else 20.0,  # 6 seconds for training, 20 for play
     )
 
     # Set the entity
@@ -487,7 +485,7 @@ class DieReorientRlCfg(RslRlOnPolicyRunnerCfg):
         )
     )
     wandb_project: str = "mjlab_myosuite"
-    experiment_name: str = "die_reorient_p1"
-    save_interval: int = 500
+    experiment_name: str = "myohand_die_reorient"
+    save_interval: int = 200
     num_steps_per_env: int = 24
     max_iterations: int = 50_000
